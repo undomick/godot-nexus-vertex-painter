@@ -13,7 +13,7 @@ Designed to feel close to Unreal Engine's mesh painting workflow.
 ## Installation
 1. Download the latest release (or clone this repo).
 2. Copy the `addons/nexus_vertex_painter` folder into your project's `addons/` folder.
-3. Go to **Project -> Project Settings -> Plugins** and enable "Vertex Texture Painter".
+3. Go to **Project -> Project Settings -> Plugins** and enable "Nexus Vertex Painter".
 
 ## Usage
 1. Select one or multiple MeshInstances.
