@@ -101,7 +101,6 @@ func get_settings() -> Dictionary:
 		"falloff": falloff_slider.value,
 		"channels": get_active_channels(),
 		"mode": _brush_mode
-		# 'target_layer' removed: We strictly use Mesh.ARRAY_COLOR now
 	}
 
 

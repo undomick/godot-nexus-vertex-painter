@@ -8,14 +8,18 @@ var dock_instance: Control
 var btn_mode: Button
 var brush_helper: MeshInstance3D
 
-# State & Data
+# Multi-Object Support Data
 var selected_meshes: Array[MeshInstance3D] = []
 var temp_colliders: Array[StaticBody3D] = []
+var locked_nodes: Array[MeshInstance3D] = [] 
+
+# State
 var is_painting: bool = false
 var paint_mode_active: bool = false 
 
+
 func _enter_tree():
-	# Setup Dock
+	# UI Setup
 	dock_instance = DOCK_SCENE.instantiate()
 	add_control_to_dock(DOCK_SLOT_RIGHT_UL, dock_instance)
 	dock_instance.fill_requested.connect(_on_fill_requested)
@@ -24,10 +28,10 @@ func _enter_tree():
 	dock_instance.procedural_requested.connect(_on_procedural_requested)
 	dock_instance.set_ui_active(false)
 	
-	# Setup Toolbar Button
+	# Toolbar Button
 	btn_mode = Button.new()
 	btn_mode.text = "Vertex Paint"
-	btn_mode.tooltip_text = "Toggle Vertex Paint Mode"
+	btn_mode.tooltip_text = "Toggle Vertex Paint Mode (Locks selection)"
 	btn_mode.toggle_mode = true
 	btn_mode.toggled.connect(_on_mode_toggled)
 	
@@ -39,8 +43,8 @@ func _enter_tree():
 	
 	_create_brush_helper()
 	
-	# Track selection changes
 	get_editor_interface().get_selection().selection_changed.connect(_on_selection_changed)
+
 
 func _exit_tree():
 	if dock_instance:
@@ -54,7 +58,9 @@ func _exit_tree():
 	if brush_helper:
 		brush_helper.queue_free()
 	
+	_clear_all_locks()
 	_clear_all_colliders()
+
 
 func _on_mode_toggled(pressed: bool):
 	paint_mode_active = pressed
@@ -62,23 +68,28 @@ func _on_mode_toggled(pressed: bool):
 	
 	if not pressed:
 		if brush_helper: brush_helper.visible = false
+		_clear_all_locks()
 		_clear_all_colliders()
 		is_painting = false
 	else:
 		_refresh_selection_and_colliders()
 
+
 func _handles(object):
 	return object is MeshInstance3D
 
+
 func _edit(object):
-	pass # Handled via selection signal
+	pass 
+
 
 func _on_selection_changed():
 	if paint_mode_active:
 		_refresh_selection_and_colliders()
 		_update_shader_debug_view()
 
-# --- SELECTION & COLLIDER MANAGEMENT ---
+
+# --- SELECTION & LOCKING LOGIC ---
 
 func _refresh_selection_and_colliders():
 	var selection = get_editor_interface().get_selection().get_selected_nodes()
@@ -88,12 +99,31 @@ func _refresh_selection_and_colliders():
 		if node is MeshInstance3D:
 			new_mesh_list.append(node)
 	
-	# Create colliders for new meshes
+	# 1. Handle Locks (Hide Gizmos)
+	if paint_mode_active:
+		for mesh in new_mesh_list:
+			if not mesh.has_meta("_edit_lock_"):
+				mesh.set_meta("_edit_lock_", true)
+				locked_nodes.append(mesh)
+				mesh.notify_property_list_changed() 
+				mesh.update_gizmos()
+
+		for i in range(locked_nodes.size() - 1, -1, -1):
+			var mesh = locked_nodes[i]
+			if is_instance_valid(mesh) and not (mesh in new_mesh_list):
+				if mesh.has_meta("_edit_lock_"):
+					mesh.remove_meta("_edit_lock_")
+					mesh.notify_property_list_changed()
+					mesh.update_gizmos()
+				locked_nodes.remove_at(i)
+			elif not is_instance_valid(mesh):
+				locked_nodes.remove_at(i)
+
+	# 2. Handle Colliders (Raycast Targets)
 	for mesh in new_mesh_list:
 		if not _has_internal_collider(mesh):
 			_create_collider_for(mesh)
 	
-	# Cleanup colliders for deselected meshes
 	for i in range(temp_colliders.size() - 1, -1, -1):
 		var sb = temp_colliders[i]
 		if not is_instance_valid(sb.get_parent()) or sb.get_parent() not in new_mesh_list:
@@ -102,26 +132,38 @@ func _refresh_selection_and_colliders():
 	
 	selected_meshes = new_mesh_list
 
+
+func _clear_all_locks():
+	for mesh in locked_nodes:
+		if is_instance_valid(mesh):
+			if mesh.has_meta("_edit_lock_"):
+				mesh.remove_meta("_edit_lock_")
+				mesh.notify_property_list_changed()
+				mesh.update_gizmos()
+	locked_nodes.clear()
+
+
 func _has_internal_collider(mesh: MeshInstance3D) -> bool:
 	for child in mesh.get_children():
 		if child in temp_colliders:
 			return true
 	return false
 
+
 func _create_collider_for(mesh_instance: MeshInstance3D):
 	if not mesh_instance.mesh: return
 	
-	# Create a temporary static body for precise raycasting
 	var sb = StaticBody3D.new()
 	var col = CollisionShape3D.new()
+	# Use trimesh for accurate painting on complex shapes
 	col.shape = mesh_instance.mesh.create_trimesh_shape()
 	sb.add_child(col)
-	
 	sb.collision_layer = 1 
 	sb.collision_mask = 0 
 	
 	mesh_instance.add_child(sb)
 	temp_colliders.append(sb)
+
 
 func _clear_all_colliders():
 	for sb in temp_colliders:
@@ -129,19 +171,42 @@ func _clear_all_colliders():
 			sb.queue_free()
 	temp_colliders.clear()
 
-# --- INPUT & RAYCASTING ---
+
+# --- MODIFIER NODE MANAGEMENT ---
+
+func _get_or_create_data_node(mesh_instance: MeshInstance3D) -> VertexColorData:
+	# Check if node exists
+	for child in mesh_instance.get_children():
+		if child is VertexColorData:
+			return child
+	
+	# Create new data node
+	var node = VertexColorData.new()
+	node.name = "VertexColorData"
+	mesh_instance.add_child(node)
+	
+	# IMPORTANT: Set owner to scene root so the node is saved in the .tscn
+	var scene_root = get_editor_interface().get_edited_scene_root()
+	if scene_root:
+		node.owner = scene_root
+		
+	return node
+
+
+# --- INPUT LOGIC ---
 
 func _forward_3d_gui_input(camera: Camera3D, event: InputEvent) -> int:
 	if not paint_mode_active: return AFTER_GUI_INPUT_PASS
+	
+	# Prevent accidental selection loss when clicking empty space
 	if selected_meshes.is_empty(): 
-		# Consume click to prevent accidental selection changes
 		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 			return AFTER_GUI_INPUT_STOP
 		return AFTER_GUI_INPUT_PASS
 
 	if not (event is InputEventMouse): return AFTER_GUI_INPUT_PASS
 
-	# Raycast setup
+	# Raycast
 	var mouse_pos = event.position
 	var ray_origin = camera.project_ray_origin(mouse_pos)
 	var ray_normal = camera.project_ray_normal(mouse_pos)
@@ -157,7 +222,7 @@ func _forward_3d_gui_input(camera: Camera3D, event: InputEvent) -> int:
 	
 	if result and result.collider:
 		var collider = result.collider
-		# Check if we hit one of our managed colliders or meshes
+		# Check if collider belongs to our selection (or is a temp collider)
 		if collider in temp_colliders:
 			hit_mesh_instance = collider.get_parent()
 		else:
@@ -169,7 +234,7 @@ func _forward_3d_gui_input(camera: Camera3D, event: InputEvent) -> int:
 		if hit_mesh_instance:
 			hit_pos = result.position
 
-	# Update Brush & Handle Paint
+	# Brush Visualization & Action
 	if hit_mesh_instance:
 		brush_helper.visible = true
 		brush_helper.global_position = hit_pos
@@ -186,6 +251,7 @@ func _forward_3d_gui_input(camera: Camera3D, event: InputEvent) -> int:
 			mat.set_shader_parameter("falloff_range", settings.falloff)
 			mat.set_shader_parameter("channel_mask", settings.channels)
 			
+		# Painting Input
 		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
 				is_painting = true
@@ -201,7 +267,8 @@ func _forward_3d_gui_input(camera: Camera3D, event: InputEvent) -> int:
 			
 	else:
 		brush_helper.visible = false
-		# Block input if clicking void to prevent gizmo interaction
+		
+		# Block input if clicking void
 		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 			is_painting = false
 			return AFTER_GUI_INPUT_STOP 
@@ -211,36 +278,44 @@ func _forward_3d_gui_input(camera: Camera3D, event: InputEvent) -> int:
 
 	return AFTER_GUI_INPUT_PASS
 
-# --- CORE PAINTING LOGIC ---
+
+# --- PAINTING LOGIC (Using VertexColorData) ---
 
 func paint_mesh(mesh_instance: MeshInstance3D, global_hit_pos: Vector3, settings: Dictionary):
 	if not mesh_instance.mesh: return
-	if not mesh_instance.mesh is ArrayMesh: return
-
-	var mesh = mesh_instance.mesh as ArrayMesh
-	if mesh.get_surface_count() == 0: return
 	
-	# Using MeshDataTool ensures stable mesh reconstruction without data corruption
+	# 1. Get or Create Data Node
+	var data_node = _get_or_create_data_node(mesh_instance)
+	var mesh = mesh_instance.mesh as ArrayMesh
+	
+	# Use MDT for geometry reading
 	var mdt = MeshDataTool.new()
-	var err = mdt.create_from_surface(mesh, 0)
-	if err != OK: return
+	if mdt.create_from_surface(mesh, 0) != OK: return
+	
+	var vertex_count = mdt.get_vertex_count()
+	
+	# 2. Operate on Node Data
+	var colors = data_node.color_data
+	
+	# Initialize if empty
+	if colors.size() != vertex_count:
+		colors.resize(vertex_count)
+		colors.fill(Color.BLACK)
 	
 	var local_hit_pos = mesh_instance.to_local(global_hit_pos)
 	var radius_sq = settings.size * settings.size
 	var modified = false
-	var target_layer = Mesh.ARRAY_COLOR
 	
-	for i in range(mdt.get_vertex_count()):
+	for i in range(vertex_count):
 		var v_pos = mdt.get_vertex(i)
 		var dist_sq = v_pos.distance_squared_to(local_hit_pos)
 		
 		if dist_sq < radius_sq:
-			var color = _get_layer_color(mdt, i, target_layer)
+			var color = colors[i]
 			
 			var dist = sqrt(dist_sq)
 			var hard_limit = 1.0 - settings.falloff
 			var actual_falloff = 1.0
-			
 			if dist / settings.size > hard_limit:
 				actual_falloff = 1.0 - ((dist / settings.size) - hard_limit) / (1.0 - hard_limit)
 			
@@ -252,14 +327,14 @@ func paint_mesh(mesh_instance: MeshInstance3D, global_hit_pos: Vector3, settings
 			if settings.channels.z > 0: color.b = clamp(color.b + (strength * blend_op), 0.0, 1.0)
 			if settings.channels.w > 0: color.a = clamp(color.a + (strength * blend_op), 0.0, 1.0)
 			
-			_set_layer_color(mdt, i, target_layer, color)
+			colors[i] = color
 			modified = true
 	
 	if modified:
-		mesh.clear_surfaces()
-		mdt.commit_to_surface(mesh)
+		data_node.update_colors(colors)
 
-# --- PROCEDURAL TOOLS ---
+
+# --- PROCEDURAL LOGIC (Using VertexColorData) ---
 
 func _on_procedural_requested(type: String, settings: Dictionary):
 	if selected_meshes.is_empty(): return
@@ -268,23 +343,28 @@ func _on_procedural_requested(type: String, settings: Dictionary):
 
 func _apply_procedural_to_mesh(mesh_instance: MeshInstance3D, type: String, settings: Dictionary):
 	if not mesh_instance.mesh: return
+	
+	var data_node = _get_or_create_data_node(mesh_instance)
 	var mesh = mesh_instance.mesh as ArrayMesh
-	if mesh.get_surface_count() == 0: return
 	
 	var mdt = MeshDataTool.new()
 	if mdt.create_from_surface(mesh, 0) != OK: return
 	
 	var vertex_count = mdt.get_vertex_count()
-	var target_layer = Mesh.ARRAY_COLOR
+	var colors = data_node.color_data
 	
-	# Setup Noise
+	if colors.size() != vertex_count:
+		colors.resize(vertex_count)
+		colors.fill(Color.BLACK)
+	
+	# Noise Setup
 	var noise = FastNoiseLite.new()
 	if type == "noise":
 		noise.seed = randi()
 		noise.frequency = 0.05 / max(settings.size, 0.01)
 		noise.fractal_type = FastNoiseLite.FRACTAL_FBM
 	
-	# Calculate Bounds for Bottom-Up
+	# Bounds for Bottom-Up
 	var min_y = 10000.0
 	var max_y = -10000.0
 	if type == "bottom_up":
@@ -300,7 +380,7 @@ func _apply_procedural_to_mesh(mesh_instance: MeshInstance3D, type: String, sett
 	var sharpness = settings.falloff
 	
 	for i in range(vertex_count):
-		var current_color = _get_layer_color(mdt, i, target_layer)
+		var current_color = colors[i]
 		
 		var v_pos = mdt.get_vertex(i)
 		var normal = mdt.get_vertex_normal(i)
@@ -338,36 +418,14 @@ func _apply_procedural_to_mesh(mesh_instance: MeshInstance3D, type: String, sett
 		if channels.z > 0: current_color.b = clamp(current_color.b + (apply_amount * blend_op), 0.0, 1.0)
 		if channels.w > 0: current_color.a = clamp(current_color.a + (apply_amount * blend_op), 0.0, 1.0)
 			
-		_set_layer_color(mdt, i, target_layer, current_color)
+		colors[i] = current_color
 		modified = true
 
 	if modified:
-		mesh.clear_surfaces()
-		mdt.commit_to_surface(mesh)
+		data_node.update_colors(colors)
 
-# --- UTILITIES ---
 
-func _create_brush_helper():
-	brush_helper = MeshInstance3D.new()
-	brush_helper.mesh = BoxMesh.new()
-	var shader = preload("res://addons/nexus_vertex_painter/shaders/brush_decal.gdshader")
-	var material = ShaderMaterial.new()
-	material.shader = shader
-	material.set_shader_parameter("color", Color(1.0, 0.5, 0.0, 0.8))
-	brush_helper.material_override = material
-	brush_helper.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	brush_helper.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
-	brush_helper.visible = false
-	add_child(brush_helper)
-
-func _get_layer_color(mdt: MeshDataTool, vertex_idx: int, layer_type: int) -> Color:
-	if layer_type == Mesh.ARRAY_COLOR:
-		return mdt.get_vertex_color(vertex_idx)
-	return Color.BLACK
-
-func _set_layer_color(mdt: MeshDataTool, vertex_idx: int, layer_type: int, color: Color) -> void:
-	if layer_type == Mesh.ARRAY_COLOR:
-		mdt.set_vertex_color(vertex_idx, color)
+# --- FILL / CLEAR LOGIC ---
 
 func _on_fill_requested(channels: Vector4, value: float):
 	if selected_meshes.is_empty(): return
@@ -381,18 +439,23 @@ func _on_clear_requested(channels: Vector4):
 
 func _apply_global_color(mesh_instance: MeshInstance3D, channels: Vector4, value: float, is_fill: bool):
 	if not mesh_instance.mesh: return
+	
+	var data_node = _get_or_create_data_node(mesh_instance)
 	var mesh = mesh_instance.mesh as ArrayMesh
-	if mesh.get_surface_count() == 0: return
 	
-	var mdt = MeshDataTool.new()
-	if mdt.create_from_surface(mesh, 0) != OK: return
+	# Just using arrays here for speed since we don't need positions
+	var arrays = mesh.surface_get_arrays(0)
+	var vertex_count = arrays[Mesh.ARRAY_VERTEX].size()
+	var colors = data_node.color_data
 	
-	var vertex_count = mdt.get_vertex_count()
-	var target_layer = Mesh.ARRAY_COLOR
+	if colors.size() != vertex_count:
+		colors.resize(vertex_count)
+		colors.fill(Color.BLACK)
+	
 	var modified = false
 	
 	for i in range(vertex_count):
-		var color = _get_layer_color(mdt, i, target_layer)
+		var color = colors[i]
 		if is_fill:
 			if channels.x > 0: color.r = 1.0
 			if channels.y > 0: color.g = 1.0
@@ -403,12 +466,11 @@ func _apply_global_color(mesh_instance: MeshInstance3D, channels: Vector4, value
 			if channels.y > 0: color.g = 0.0
 			if channels.z > 0: color.b = 0.0
 			if channels.w > 0: color.a = 0.0
-		_set_layer_color(mdt, i, target_layer, color)
+		colors[i] = color
 		modified = true
 		
 	if modified:
-		mesh.clear_surfaces()
-		mdt.commit_to_surface(mesh)
+		data_node.update_colors(colors)
 
 func _on_settings_changed():
 	_update_shader_debug_view()
@@ -418,3 +480,16 @@ func _update_shader_debug_view():
 		var mat = mesh.get_active_material(0) as ShaderMaterial
 		if mat:
 			mat.set_shader_parameter("active_layer_view", 0)
+
+func _create_brush_helper():
+	brush_helper = MeshInstance3D.new()
+	brush_helper.mesh = BoxMesh.new()
+	var shader = preload("res://addons/nexus_vertex_painter/shaders/brush_decal.gdshader")
+	var material = ShaderMaterial.new()
+	material.shader = shader
+	material.set_shader_parameter("color", Color(1.0, 0.5, 0.0, 0.8))
+	brush_helper.material_override = material
+	brush_helper.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	brush_helper.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+	brush_helper.visible = false
+	add_child(brush_helper)
