@@ -1,9 +1,9 @@
-# Auto detect text files and perform LF normalization
+# 1. Setze Zeilenenden automatisch (Standard)
 * text=auto
 
-# 1. Ignore everything by default
+# 2. Ignoriere ALLES standardmäßig beim Export
 * export-ignore
 
-# 2. Whitelist the addons folder (folder itself AND contents)
-!addons/
-!addons/**
+# 3. Mache Ausnahmen (Deaktiviere "ignore" für den addons Ordner)
+addons/ -export-ignore
+addons/** -export-ignore
