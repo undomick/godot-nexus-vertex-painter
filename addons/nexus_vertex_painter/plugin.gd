@@ -3,23 +3,26 @@ extends EditorPlugin
 
 const DOCK_SCENE = preload("res://addons/nexus_vertex_painter/painter_dock.tscn")
 
-# UI & References
+# --- UI & REFERENCES ---
 var dock_instance: Control
 var btn_mode: Button
-var brush_helper: MeshInstance3D
 
-# Multi-Object Support Data
+# We use a single shared material for all phantom meshes to visualize the brush.
+# This ensures efficient updates and consistent visuals.
+var shared_brush_material: ShaderMaterial 
+
+# --- DATA & STATE ---
 var selected_meshes: Array[MeshInstance3D] = []
-var temp_colliders: Array[StaticBody3D] = []
+# temp_colliders stores both StaticBodies (for raycast) and Phantom Meshes (for visuals)
+var temp_colliders: Array[Node] = [] 
 var locked_nodes: Array[MeshInstance3D] = [] 
 
-# State
 var is_painting: bool = false
 var paint_mode_active: bool = false 
 
 
 func _enter_tree():
-	# UI Setup
+	# 1. Initialize UI Dock
 	dock_instance = DOCK_SCENE.instantiate()
 	add_control_to_dock(DOCK_SLOT_RIGHT_UL, dock_instance)
 	dock_instance.fill_requested.connect(_on_fill_requested)
@@ -28,10 +31,10 @@ func _enter_tree():
 	dock_instance.procedural_requested.connect(_on_procedural_requested)
 	dock_instance.set_ui_active(false)
 	
-	# Toolbar Button
+	# 2. Initialize Toolbar Button
 	btn_mode = Button.new()
 	btn_mode.text = "Vertex Paint"
-	btn_mode.tooltip_text = "Toggle Vertex Paint Mode (Locks selection)"
+	btn_mode.tooltip_text = "Toggle Vertex Paint Mode"
 	btn_mode.toggle_mode = true
 	btn_mode.toggled.connect(_on_mode_toggled)
 	
@@ -41,8 +44,10 @@ func _enter_tree():
 	
 	add_control_to_container(CONTAINER_SPATIAL_EDITOR_MENU, btn_mode)
 	
-	_create_brush_helper()
+	# 3. Setup Brush Material
+	_init_shared_brush_material()
 	
+	# 4. Monitor Selection
 	get_editor_interface().get_selection().selection_changed.connect(_on_selection_changed)
 
 
@@ -55,9 +60,6 @@ func _exit_tree():
 		remove_control_from_container(CONTAINER_SPATIAL_EDITOR_MENU, btn_mode)
 		btn_mode.free()
 	
-	if brush_helper:
-		brush_helper.queue_free()
-	
 	_clear_all_locks()
 	_clear_all_colliders()
 
@@ -67,7 +69,6 @@ func _on_mode_toggled(pressed: bool):
 	dock_instance.set_ui_active(pressed)
 	
 	if not pressed:
-		if brush_helper: brush_helper.visible = false
 		_clear_all_locks()
 		_clear_all_colliders()
 		is_painting = false
@@ -80,7 +81,7 @@ func _handles(object):
 
 
 func _edit(object):
-	pass 
+	pass # Handled via selection signal
 
 
 func _on_selection_changed():
@@ -89,7 +90,7 @@ func _on_selection_changed():
 		_update_shader_debug_view()
 
 
-# --- SELECTION & LOCKING LOGIC ---
+# --- SELECTION, LOCKING & COLLIDER LOGIC ---
 
 func _refresh_selection_and_colliders():
 	var selection = get_editor_interface().get_selection().get_selected_nodes()
@@ -99,15 +100,16 @@ func _refresh_selection_and_colliders():
 		if node is MeshInstance3D:
 			new_mesh_list.append(node)
 	
-	# 1. Handle Locks (Hide Gizmos)
 	if paint_mode_active:
+		# 1. LOCKING: Hide Gizmos for selected objects
 		for mesh in new_mesh_list:
 			if not mesh.has_meta("_edit_lock_"):
 				mesh.set_meta("_edit_lock_", true)
 				locked_nodes.append(mesh)
 				mesh.notify_property_list_changed() 
-				mesh.update_gizmos()
+				mesh.update_gizmos() # Forces gizmo to disappear
 
+		# Unlock objects that are no longer selected
 		for i in range(locked_nodes.size() - 1, -1, -1):
 			var mesh = locked_nodes[i]
 			if is_instance_valid(mesh) and not (mesh in new_mesh_list):
@@ -119,15 +121,16 @@ func _refresh_selection_and_colliders():
 			elif not is_instance_valid(mesh):
 				locked_nodes.remove_at(i)
 
-	# 2. Handle Colliders (Raycast Targets)
+	# 2. COLLIDERS & PHANTOMS: Create helpers for new selection
 	for mesh in new_mesh_list:
 		if not _has_internal_collider(mesh):
 			_create_collider_for(mesh)
 	
+	# Cleanup helpers for deselected objects
 	for i in range(temp_colliders.size() - 1, -1, -1):
-		var sb = temp_colliders[i]
-		if not is_instance_valid(sb.get_parent()) or sb.get_parent() not in new_mesh_list:
-			sb.queue_free()
+		var node = temp_colliders[i]
+		if not is_instance_valid(node.get_parent()) or node.get_parent() not in new_mesh_list:
+			node.queue_free()
 			temp_colliders.remove_at(i)
 	
 	selected_meshes = new_mesh_list
@@ -153,9 +156,9 @@ func _has_internal_collider(mesh: MeshInstance3D) -> bool:
 func _create_collider_for(mesh_instance: MeshInstance3D):
 	if not mesh_instance.mesh: return
 	
+	# A. PHYSICS COLLIDER (For Raycasting)
 	var sb = StaticBody3D.new()
 	var col = CollisionShape3D.new()
-	# Use trimesh for accurate painting on complex shapes
 	col.shape = mesh_instance.mesh.create_trimesh_shape()
 	sb.add_child(col)
 	sb.collision_layer = 1 
@@ -163,42 +166,50 @@ func _create_collider_for(mesh_instance: MeshInstance3D):
 	
 	mesh_instance.add_child(sb)
 	temp_colliders.append(sb)
+	
+	# B. PHANTOM MESH (For Visualization / Depth Overlay)
+	# This creates a visual duplicate that uses the brush shader.
+	# The shader pushes vertices outwards to overlay the original mesh perfectly.
+	var phantom = MeshInstance3D.new()
+	phantom.mesh = mesh_instance.mesh
+	phantom.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	phantom.material_override = shared_brush_material
+	
+	mesh_instance.add_child(phantom)
+	temp_colliders.append(phantom)
 
 
 func _clear_all_colliders():
-	for sb in temp_colliders:
-		if is_instance_valid(sb):
-			sb.queue_free()
+	for node in temp_colliders:
+		if is_instance_valid(node):
+			node.queue_free()
 	temp_colliders.clear()
 
 
-# --- MODIFIER NODE MANAGEMENT ---
-
-func _get_or_create_data_node(mesh_instance: MeshInstance3D) -> VertexColorData:
-	# Check if node exists
-	for child in mesh_instance.get_children():
-		if child is VertexColorData:
-			return child
-	
-	# Create new data node
-	var node = VertexColorData.new()
-	node.name = "VertexColorData"
-	mesh_instance.add_child(node)
-	
-	# IMPORTANT: Set owner to scene root so the node is saved in the .tscn
-	var scene_root = get_editor_interface().get_edited_scene_root()
-	if scene_root:
-		node.owner = scene_root
-		
-	return node
-
-
-# --- INPUT LOGIC ---
+# --- INPUT HANDLING ---
 
 func _forward_3d_gui_input(camera: Camera3D, event: InputEvent) -> int:
 	if not paint_mode_active: return AFTER_GUI_INPUT_PASS
 	
-	# Prevent accidental selection loss when clicking empty space
+	# --- SHORTCUTS ---
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_X:
+			dock_instance.toggle_add_subtract()
+			return AFTER_GUI_INPUT_STOP
+		if event.keycode == KEY_1:
+			dock_instance.toggle_channel_by_index(0)
+			return AFTER_GUI_INPUT_STOP
+		if event.keycode == KEY_2:
+			dock_instance.toggle_channel_by_index(1)
+			return AFTER_GUI_INPUT_STOP
+		if event.keycode == KEY_3:
+			dock_instance.toggle_channel_by_index(2)
+			return AFTER_GUI_INPUT_STOP
+		if event.keycode == KEY_4:
+			dock_instance.toggle_channel_by_index(3)
+			return AFTER_GUI_INPUT_STOP
+	
+	# Prevent accidental deselection
 	if selected_meshes.is_empty(): 
 		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 			return AFTER_GUI_INPUT_STOP
@@ -206,7 +217,7 @@ func _forward_3d_gui_input(camera: Camera3D, event: InputEvent) -> int:
 
 	if not (event is InputEventMouse): return AFTER_GUI_INPUT_PASS
 
-	# Raycast
+	# --- RAYCAST ---
 	var mouse_pos = event.position
 	var ray_origin = camera.project_ray_origin(mouse_pos)
 	var ray_normal = camera.project_ray_normal(mouse_pos)
@@ -219,10 +230,13 @@ func _forward_3d_gui_input(camera: Camera3D, event: InputEvent) -> int:
 	var result = space_state.intersect_ray(query)
 	var hit_pos = Vector3.ZERO
 	var hit_mesh_instance: MeshInstance3D = null
+	var hit_something = false
 	
 	if result and result.collider:
+		hit_something = true
 		var collider = result.collider
-		# Check if collider belongs to our selection (or is a temp collider)
+		
+		# Identify which mesh was hit (checking both temp colliders and original meshes)
 		if collider in temp_colliders:
 			hit_mesh_instance = collider.get_parent()
 		else:
@@ -234,24 +248,26 @@ func _forward_3d_gui_input(camera: Camera3D, event: InputEvent) -> int:
 		if hit_mesh_instance:
 			hit_pos = result.position
 
-	# Brush Visualization & Action
-	if hit_mesh_instance:
-		brush_helper.visible = true
-		brush_helper.global_position = hit_pos
-		
+	# --- BRUSH UPDATE (Global Material) ---
+	if hit_something:
 		var settings = dock_instance.get_settings()
-		var box_size = settings.size * 2.5
-		brush_helper.scale = Vector3(box_size, 20.0, box_size)
-		brush_helper.rotation = Vector3.ZERO
 		
-		var mat = brush_helper.material_override as ShaderMaterial
-		if mat:
-			mat.set_shader_parameter("brush_radius", settings.size)
-			mat.set_shader_parameter("brush_pos", hit_pos)
-			mat.set_shader_parameter("falloff_range", settings.falloff)
-			mat.set_shader_parameter("channel_mask", settings.channels)
-			
-		# Painting Input
+		if hit_mesh_instance:
+			shared_brush_material.set_shader_parameter("brush_pos", hit_pos)
+			shared_brush_material.set_shader_parameter("brush_radius", settings.size)
+			shared_brush_material.set_shader_parameter("falloff_range", settings.falloff)
+			shared_brush_material.set_shader_parameter("channel_mask", settings.channels)
+		else:
+			# Hit something else (not selected) -> Hide brush
+			shared_brush_material.set_shader_parameter("brush_radius", 0.0)
+	else:
+		# Hit sky -> Hide brush
+		shared_brush_material.set_shader_parameter("brush_radius", 0.0)
+
+	# --- PAINTING ACTION ---
+	if hit_mesh_instance:
+		var settings = dock_instance.get_settings()
+		
 		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
 				is_painting = true
@@ -266,9 +282,6 @@ func _forward_3d_gui_input(camera: Camera3D, event: InputEvent) -> int:
 			return AFTER_GUI_INPUT_STOP
 			
 	else:
-		brush_helper.visible = false
-		
-		# Block input if clicking void
 		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 			is_painting = false
 			return AFTER_GUI_INPUT_STOP 
@@ -279,25 +292,43 @@ func _forward_3d_gui_input(camera: Camera3D, event: InputEvent) -> int:
 	return AFTER_GUI_INPUT_PASS
 
 
-# --- PAINTING LOGIC (Using VertexColorData) ---
+# --- MODIFIER NODE MANAGEMENT ---
+
+func _get_or_create_data_node(mesh_instance: MeshInstance3D) -> VertexColorData:
+	# 1. Search for existing node
+	for child in mesh_instance.get_children():
+		if child is VertexColorData:
+			return child
+	
+	# 2. Create new node
+	var node = VertexColorData.new()
+	node.name = "VertexColorData"
+	mesh_instance.add_child(node)
+	
+	# 3. Set owner to save it in .tscn
+	var scene_root = get_editor_interface().get_edited_scene_root()
+	if scene_root:
+		node.owner = scene_root
+		
+	return node
+
+
+# --- PAINTING LOGIC (Non-Destructive) ---
 
 func paint_mesh(mesh_instance: MeshInstance3D, global_hit_pos: Vector3, settings: Dictionary):
 	if not mesh_instance.mesh: return
 	
-	# 1. Get or Create Data Node
 	var data_node = _get_or_create_data_node(mesh_instance)
 	var mesh = mesh_instance.mesh as ArrayMesh
 	
-	# Use MDT for geometry reading
+	# Use MeshDataTool for reading geometry (positions)
 	var mdt = MeshDataTool.new()
 	if mdt.create_from_surface(mesh, 0) != OK: return
 	
 	var vertex_count = mdt.get_vertex_count()
-	
-	# 2. Operate on Node Data
 	var colors = data_node.color_data
 	
-	# Initialize if empty
+	# Initialize colors if empty
 	if colors.size() != vertex_count:
 		colors.resize(vertex_count)
 		colors.fill(Color.BLACK)
@@ -334,7 +365,7 @@ func paint_mesh(mesh_instance: MeshInstance3D, global_hit_pos: Vector3, settings
 		data_node.update_colors(colors)
 
 
-# --- PROCEDURAL LOGIC (Using VertexColorData) ---
+# --- PROCEDURAL LOGIC (Non-Destructive) ---
 
 func _on_procedural_requested(type: String, settings: Dictionary):
 	if selected_meshes.is_empty(): return
@@ -357,14 +388,13 @@ func _apply_procedural_to_mesh(mesh_instance: MeshInstance3D, type: String, sett
 		colors.resize(vertex_count)
 		colors.fill(Color.BLACK)
 	
-	# Noise Setup
+	# Procedural Setup
 	var noise = FastNoiseLite.new()
 	if type == "noise":
 		noise.seed = randi()
 		noise.frequency = 0.05 / max(settings.size, 0.01)
 		noise.fractal_type = FastNoiseLite.FRACTAL_FBM
 	
-	# Bounds for Bottom-Up
 	var min_y = 10000.0
 	var max_y = -10000.0
 	if type == "bottom_up":
@@ -425,7 +455,7 @@ func _apply_procedural_to_mesh(mesh_instance: MeshInstance3D, type: String, sett
 		data_node.update_colors(colors)
 
 
-# --- FILL / CLEAR LOGIC ---
+# --- FILL / CLEAR (Non-Destructive) ---
 
 func _on_fill_requested(channels: Vector4, value: float):
 	if selected_meshes.is_empty(): return
@@ -443,7 +473,6 @@ func _apply_global_color(mesh_instance: MeshInstance3D, channels: Vector4, value
 	var data_node = _get_or_create_data_node(mesh_instance)
 	var mesh = mesh_instance.mesh as ArrayMesh
 	
-	# Just using arrays here for speed since we don't need positions
 	var arrays = mesh.surface_get_arrays(0)
 	var vertex_count = arrays[Mesh.ARRAY_VERTEX].size()
 	var colors = data_node.color_data
@@ -472,6 +501,17 @@ func _apply_global_color(mesh_instance: MeshInstance3D, channels: Vector4, value
 	if modified:
 		data_node.update_colors(colors)
 
+
+# --- HELPERS ---
+
+func _init_shared_brush_material():
+	# Load the "Physical Overlay" shader
+	var shader = preload("res://addons/nexus_vertex_painter/shaders/brush_decal.gdshader")
+	shared_brush_material = ShaderMaterial.new()
+	shared_brush_material.shader = shader
+	shared_brush_material.set_shader_parameter("color", Color(1.0, 0.5, 0.0, 0.8))
+	shared_brush_material.render_priority = 100 
+
 func _on_settings_changed():
 	_update_shader_debug_view()
 
@@ -480,16 +520,3 @@ func _update_shader_debug_view():
 		var mat = mesh.get_active_material(0) as ShaderMaterial
 		if mat:
 			mat.set_shader_parameter("active_layer_view", 0)
-
-func _create_brush_helper():
-	brush_helper = MeshInstance3D.new()
-	brush_helper.mesh = BoxMesh.new()
-	var shader = preload("res://addons/nexus_vertex_painter/shaders/brush_decal.gdshader")
-	var material = ShaderMaterial.new()
-	material.shader = shader
-	material.set_shader_parameter("color", Color(1.0, 0.5, 0.0, 0.8))
-	brush_helper.material_override = material
-	brush_helper.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	brush_helper.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
-	brush_helper.visible = false
-	add_child(brush_helper)

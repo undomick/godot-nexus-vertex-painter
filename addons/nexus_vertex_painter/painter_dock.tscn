@@ -16,7 +16,7 @@ script = ExtResource("1_6ldxv")
 [node name="VBoxContainer" type="VBoxContainer" parent="."]
 layout_mode = 2
 script = ExtResource("2_gpvri")
-title = "Brush Settings"
+title = "Settings"
 
 [node name="GridContainer" type="GridContainer" parent="VBoxContainer"]
 layout_mode = 2
@@ -34,7 +34,7 @@ size_flags_horizontal = 3
 size_flags_vertical = 4
 localize_numeral_system = false
 accessibility_name = "Brush Size"
-min_value = 0.1
+min_value = 0.01
 max_value = 5.0
 step = 0.01
 value = 1.0
@@ -84,12 +84,12 @@ accessibility_name = "Brush Strength"
 min_value = 0.01
 max_value = 1.0
 step = 0.01
-value = 0.09999999999999999
+value = 0.25
 
 [node name="BrushSizeLineEdit3" type="LineEdit" parent="VBoxContainer/GridContainer"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "0.1"
+text = "0.25"
 alignment = 1
 flat = true
 select_all_on_focus = true

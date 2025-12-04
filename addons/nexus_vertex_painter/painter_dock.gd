@@ -79,7 +79,8 @@ func _ready() -> void:
 		btn_proc_slope.pressed.connect(_on_proc_slope_pressed)
 	if not btn_proc_noise.pressed.is_connected(_on_proc_noise_pressed):
 		btn_proc_noise.pressed.connect(_on_proc_noise_pressed)
-
+	
+	_update_all_button_visuals()
 	set_ui_active(false)
 
 
@@ -144,8 +145,53 @@ func _setup_slider_link(slider: Slider, edit: LineEdit, default_val: float) -> v
 # Dummy handlers to check connection existence
 func _on_slider_changed(_val): pass
 func _on_edit_submitted(_text): pass
-func _on_settings_changed_arg(_arg): emit_signal("settings_changed")
+func _on_settings_changed_arg(_arg):
+	_update_all_button_visuals()
+	emit_signal("settings_changed")
 
+# --- VISUAL UPDATE HELPER ---
+
+func _update_all_button_visuals():
+	_apply_active_style(btn_r, Color(0.8, 0.2, 0.2, 0.4), Color(1.0, 0.4, 0.4)) # Rot
+	_apply_active_style(btn_g, Color(0.2, 0.8, 0.2, 0.4), Color(0.4, 1.0, 0.4)) # Grün
+	_apply_active_style(btn_b, Color(0.2, 0.2, 0.8, 0.4), Color(0.4, 0.4, 1.0)) # Blau
+	_apply_active_style(btn_a, Color(0.8, 0.8, 0.8, 0.4), Color(1.0, 1.0, 1.0)) # Weiß/Alpha
+	
+	# Tool Buttons
+	var accent = get_theme_color("accent_color", "Editor")
+	var bg_accent = accent
+	bg_accent.a = 0.4
+	
+	_apply_active_style(btn_add, bg_accent, accent)
+	_apply_active_style(btn_sub, bg_accent, accent)
+
+func _apply_active_style(btn: Button, bg_color: Color, border_color: Color):
+	if btn.button_pressed:
+		var style = StyleBoxFlat.new()
+		style.bg_color = bg_color
+		style.border_color = border_color
+		
+		style.border_width_bottom = 2
+		style.border_width_top = 2
+		style.border_width_left = 2
+		style.border_width_right = 2
+		
+		var radius = 4
+		style.corner_radius_top_left = radius
+		style.corner_radius_top_right = radius
+		style.corner_radius_bottom_right = radius
+		style.corner_radius_bottom_left = radius
+		
+		btn.add_theme_stylebox_override("normal", style)
+		btn.add_theme_stylebox_override("hover", style)
+		btn.add_theme_stylebox_override("pressed", style)
+		btn.add_theme_stylebox_override("focus", style) # Auch bei Fokus
+	else:
+		# remove style -> Standard Godot Look
+		btn.remove_theme_stylebox_override("normal")
+		btn.remove_theme_stylebox_override("hover")
+		btn.remove_theme_stylebox_override("pressed")
+		btn.remove_theme_stylebox_override("focus")
 
 # --- BUTTON HANDLERS ---
 
@@ -153,12 +199,14 @@ func _on_mode_add_pressed() -> void:
 	_brush_mode = 0
 	btn_add.button_pressed = true
 	btn_sub.button_pressed = false
+	_update_all_button_visuals()
 	emit_signal("settings_changed")
 
 func _on_mode_sub_pressed() -> void:
 	_brush_mode = 1
 	btn_sub.button_pressed = true
 	btn_add.button_pressed = false
+	_update_all_button_visuals()
 	emit_signal("settings_changed")
 
 func _on_fill_pressed() -> void:
@@ -178,3 +226,19 @@ func _on_proc_slope_pressed():
 
 func _on_proc_noise_pressed():
 	emit_signal("procedural_requested", "noise", get_settings())
+
+# --- SHORTCUT HANDLERS ---
+
+func toggle_add_subtract():
+	# Toggle between 0 (Add) and 1 (Subtract)
+	if _brush_mode == 0:
+		_on_mode_sub_pressed()
+	else:
+		_on_mode_add_pressed()
+
+func toggle_channel_by_index(index: int):
+	# 0=R, 1=G, 2=B, 3=A
+	var buttons = [btn_r, btn_g, btn_b, btn_a]
+	if index >= 0 and index < buttons.size():
+		var btn = buttons[index]
+		btn.button_pressed = !btn.button_pressed

@@ -1,91 +1,97 @@
 shader_type spatial;
-render_mode unshaded, depth_test_disabled, cull_front, blend_mix;
 
-uniform sampler2D depth_texture : hint_depth_texture, filter_linear_mipmap;
+// unshaded: Lighting calculation not needed for a UI element.
+// depth_draw_never: This object should not write to the depth buffer (it's a ghost overlay).
+// cull_back: Standard culling.
+// blend_mix: Standard alpha blending.
+render_mode unshaded, depth_draw_never, cull_back, blend_mix;
 
-// Wir übergeben die aktiven Kanäle als Vektor (1.0 = an, 0.0 = aus)
+// Active color channels mask (1.0 = active, 0.0 = inactive)
 uniform vec4 channel_mask = vec4(1.0, 0.0, 0.0, 0.0); 
 
+// Brush settings passed from the plugin
 uniform float brush_radius = 1.0; 
 uniform float falloff_range : hint_range(0.0, 1.0) = 0.5;
 uniform vec3 brush_pos; 
 
-// Einstellungen für die Liniendicke (in World Units)
-uniform float width_outer = 0.01; // Etwas kräftiger
-uniform float width_inner = 0.005; // Sehr fein (Filigran)
+// Visual settings for the ring lines
+uniform float width_outer = 0.008; 
+uniform float width_inner = 0.002; 
+uniform float softness = 0.002;
+uniform float thickness_scale = 0.015;
+uniform float min_thickness = 0.002;
+
+// Varying to pass the world position from Vertex to Fragment stage
+varying vec3 world_pos;
+
+void vertex() {
+	// 1. "Physical Overlay": Push vertices out along their normals.
+	// This guarantees the ring floats slightly ABOVE the original mesh, preventing Z-fighting.
+	VERTEX += NORMAL * 0.005; // 5mm offset
+	
+	// 2. Calculate world position for distance checks in the fragment shader
+	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+}
 
 void fragment() {
-	// 1. Tiefenwert & Weltposition (Standard Prozedur)
-	float depth = texture(depth_texture, SCREEN_UV).x;
-	vec3 ndc = vec3(SCREEN_UV * 2.0 - 1.0, depth);
-	vec4 view = INV_PROJECTION_MATRIX * vec4(ndc, 1.0);
-	view.xyz /= view.w;
-	vec4 world = INV_VIEW_MATRIX * vec4(view.xyz, 1.0);
+	// 3. Calculate 3D distance from the brush center
+	float dist = distance(world_pos, brush_pos);
 	
-	// 2. Distanz zur Pinselmitte
-	float dist = distance(world.xyz, brush_pos);
+	// --- DYNAMIC WIDTH CALCULATION ---
+	// Scale thickness based on brush size, but clamp to a minimum visibility
+	float w_outer = max(min_thickness, brush_radius * thickness_scale);
+	float w_inner = max(min_thickness * 0.5, w_outer * 0.25);
+	float dyn_softness = w_outer * 0.5;
 	
-	// --- FARB LOGIK ---
-	// Wir mischen die Farbe basierend auf den aktiven RGB Kanälen
+	// --- COLOR LOGIC ---
+	// Mix color based on active channels
 	vec3 final_color = vec3(0.0);
-	
-	// Additive Farbmischung für RGB
 	if (channel_mask.r > 0.5) final_color.r += 1.0;
 	if (channel_mask.g > 0.5) final_color.g += 1.0;
 	if (channel_mask.b > 0.5) final_color.b += 1.0;
 	
-	// Fallback: Wenn nichts oder nur Alpha gewählt ist, machen wir es Grau/Weiß
-	if (length(final_color) < 0.1) {
-		final_color = vec3(0.5); // Neutrales Grau
-	}
+	// Fallback to gray if no channel is selected
+	if (length(final_color) < 0.1) final_color = vec3(0.5); 
 	
-	// Normalisieren, damit Gelb (R+G) nicht heller ist als Rot
-	final_color = normalize(final_color + vec3(0.001)); // +0.001 gegen div/0
+	// Normalize to prevent mixed colors (like yellow) from being brighter than single colors
+	final_color = normalize(final_color + vec3(0.001));
 	
-	// --- RING LOGIK ---
-	
+	// --- RING LOGIC ---
 	float alpha = 0.0;
 	
-	// A. Äußerer Ring (Pinselgrenze)
+	// A. Outer Ring (Brush Boundary)
 	float dist_delta_outer = abs(dist - brush_radius);
-	// Wir nutzen hier feste Pixel-Breiten für "Crispness" wäre schwer, 
-	// daher sehr kleine World-Werte für smoothstep.
-	float outer_ring = 1.0 - smoothstep(width_outer, width_outer + 0.005, dist_delta_outer);
+	float outer_ring = 1.0 - smoothstep(w_outer, w_outer + dyn_softness, dist_delta_outer);
 	
-	// B. Innerer Ring (Falloff Start)
+	// B. Inner Ring (Falloff Start)
 	float inner_radius_val = brush_radius * (1.0 - falloff_range);
 	float dist_delta_inner = abs(dist - inner_radius_val);
-	float inner_ring = 1.0 - smoothstep(width_inner, width_inner + 0.005, dist_delta_inner);
+	float inner_ring = 1.0 - smoothstep(w_inner, w_inner + dyn_softness, dist_delta_inner);
 	
-	// --- VISUALISIERUNG ZUSAMMENBAUEN ---
+	// --- VISUAL ASSEMBLY ---
 	
-	// Wenn Alpha aktiv ist, machen wir den INNEREN Ring Weiß, sonst nimmt er die RGB Farbe
+	// If Alpha channel is active, color the inner ring white
 	vec3 inner_color_visual = final_color;
-	if (channel_mask.a > 0.5) {
-		inner_color_visual = vec3(1.0); // Weiß für Alpha
-	}
+	if (channel_mask.a > 0.5) inner_color_visual = vec3(1.0); 
 	
-	// Pixel Farbe entscheiden: Bin ich auf dem Außen- oder Innenring?
 	vec3 out_rgb = vec3(0.0);
 	
-	// Einfaches Blending: Äußerer Ring gewinnt am Rand
+	// Compose rings
 	if (outer_ring > 0.0) {
 		out_rgb = final_color;
 		alpha = outer_ring;
 	} 
-	// Innerer Ring wird "addiert" oder überschreibt
 	if (inner_ring > 0.0) {
 		out_rgb = inner_color_visual;
-		// Wir nehmen das Maximum an Alpha, damit sich Ringe sauber kreuzen
 		alpha = max(alpha, inner_ring);
 	}
 	
-	// C. Cull Box (Clipping)
-	vec3 local_pos = (inverse(MODEL_MATRIX) * world).xyz;
-	if (abs(local_pos.x) > 0.5 || abs(local_pos.z) > 0.5 || abs(local_pos.y) > 0.5) {
+	// Clipping: Discard pixels far outside the brush radius for performance
+	if (dist > brush_radius + w_outer + 0.1) {
 		alpha = 0.0;
+		discard;
 	}
 
 	ALBEDO = out_rgb;
-	ALPHA = alpha; // Volle Deckkraft wo Ring ist, 0 woanders
+	ALPHA = alpha; 
 }
