@@ -1,4 +1,4 @@
-[gd_scene load_steps=7 format=3 uid="uid://frmsqrvckd2f"]
+[gd_scene format=3 uid="uid://frmsqrvckd2f"]
 
 [ext_resource type="Script" uid="uid://cbea58btcl6c" path="res://addons/nexus_vertex_painter/painter_dock.gd" id="1_6ldxv"]
 [ext_resource type="Script" uid="uid://ccdx60vdnraf7" path="res://addons/nexus_vertex_painter/UI/collapsible_category.gd" id="2_gpvri"]
@@ -40,7 +40,7 @@ corner_radius_top_right = 4
 corner_radius_bottom_right = 4
 corner_radius_bottom_left = 4
 
-[node name="PainterDock" type="VBoxContainer"]
+[node name="PainterDock" type="VBoxContainer" unique_id=878400413]
 process_mode = 4
 modulate = Color(0.5, 0.5, 0.5, 0.5)
 anchors_preset = 15
@@ -50,16 +50,16 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_6ldxv")
 
-[node name="ChannelContainer" type="VBoxContainer" parent="."]
+[node name="ChannelContainer" type="VBoxContainer" parent="." unique_id=228772209]
 layout_mode = 2
 script = ExtResource("2_gpvri")
 title = "Channels"
 
-[node name="ChannelGridContainer" type="GridContainer" parent="ChannelContainer"]
+[node name="ChannelGridContainer" type="GridContainer" parent="ChannelContainer" unique_id=2022092793]
 layout_mode = 2
 columns = 4
 
-[node name="R_Btn" type="Button" parent="ChannelContainer/ChannelGridContainer"]
+[node name="R_Btn" type="Button" parent="ChannelContainer/ChannelGridContainer" unique_id=552762133]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
@@ -71,45 +71,45 @@ toggle_mode = true
 button_pressed = true
 text = "R"
 
-[node name="G_Btn" type="Button" parent="ChannelContainer/ChannelGridContainer"]
+[node name="G_Btn" type="Button" parent="ChannelContainer/ChannelGridContainer" unique_id=162147437]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 toggle_mode = true
 text = "G"
 
-[node name="B_Btn" type="Button" parent="ChannelContainer/ChannelGridContainer"]
+[node name="B_Btn" type="Button" parent="ChannelContainer/ChannelGridContainer" unique_id=56739663]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 toggle_mode = true
 text = "B"
 
-[node name="A_Btn" type="Button" parent="ChannelContainer/ChannelGridContainer"]
+[node name="A_Btn" type="Button" parent="ChannelContainer/ChannelGridContainer" unique_id=1520873168]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 toggle_mode = true
 text = "A"
 
-[node name="HSeparator2" type="HSeparator" parent="ChannelContainer"]
+[node name="HSeparator2" type="HSeparator" parent="ChannelContainer" unique_id=442131354]
 layout_mode = 2
 
-[node name="SettingsContainer" type="VBoxContainer" parent="."]
+[node name="SettingsContainer" type="VBoxContainer" parent="." unique_id=692159483]
 layout_mode = 2
 script = ExtResource("2_gpvri")
 title = "Settings"
 
-[node name="GridContainerSettings" type="GridContainer" parent="SettingsContainer"]
+[node name="GridContainerSettings" type="GridContainer" parent="SettingsContainer" unique_id=252636380]
 layout_mode = 2
 columns = 3
 
-[node name="BrushSize_Label" type="Label" parent="SettingsContainer/GridContainerSettings"]
+[node name="BrushSize_Label" type="Label" parent="SettingsContainer/GridContainerSettings" unique_id=1313972802]
 layout_mode = 2
 theme_override_font_sizes/font_size = 12
 text = "Size :"
 
-[node name="BrushSizeSlider" type="HSlider" parent="SettingsContainer/GridContainerSettings"]
+[node name="BrushSizeSlider" type="HSlider" parent="SettingsContainer/GridContainerSettings" unique_id=441510224]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
@@ -121,19 +121,19 @@ max_value = 10.0
 step = 0.01
 value = 1.0
 
-[node name="BrushSizeLineEdit" type="LineEdit" parent="SettingsContainer/GridContainerSettings"]
+[node name="BrushSizeLineEdit" type="LineEdit" parent="SettingsContainer/GridContainerSettings" unique_id=149975866]
 unique_name_in_owner = true
 layout_mode = 2
 text = "1.0"
 alignment = 1
 select_all_on_focus = true
 
-[node name="BrushFalloff_Label" type="Label" parent="SettingsContainer/GridContainerSettings"]
+[node name="BrushFalloff_Label" type="Label" parent="SettingsContainer/GridContainerSettings" unique_id=1210608018]
 layout_mode = 2
 theme_override_font_sizes/font_size = 12
 text = "Falloff :"
 
-[node name="BrushFalloffSlider" type="HSlider" parent="SettingsContainer/GridContainerSettings"]
+[node name="BrushFalloffSlider" type="HSlider" parent="SettingsContainer/GridContainerSettings" unique_id=1720997272]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
@@ -143,19 +143,19 @@ max_value = 1.0
 step = 0.01
 value = 0.5
 
-[node name="BrushSizeLineEdit2" type="LineEdit" parent="SettingsContainer/GridContainerSettings"]
+[node name="BrushSizeLineEdit2" type="LineEdit" parent="SettingsContainer/GridContainerSettings" unique_id=151937413]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0.5"
 alignment = 1
 select_all_on_focus = true
 
-[node name="BrushStrength_Label" type="Label" parent="SettingsContainer/GridContainerSettings"]
+[node name="BrushStrength_Label" type="Label" parent="SettingsContainer/GridContainerSettings" unique_id=680652116]
 layout_mode = 2
 theme_override_font_sizes/font_size = 12
 text = "Strength : "
 
-[node name="BrushStrengthSlider" type="HSlider" parent="SettingsContainer/GridContainerSettings"]
+[node name="BrushStrengthSlider" type="HSlider" parent="SettingsContainer/GridContainerSettings" unique_id=1933322923]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
@@ -166,38 +166,38 @@ max_value = 1.0
 step = 0.01
 value = 0.25
 
-[node name="BrushSizeLineEdit3" type="LineEdit" parent="SettingsContainer/GridContainerSettings"]
+[node name="BrushSizeLineEdit3" type="LineEdit" parent="SettingsContainer/GridContainerSettings" unique_id=1413803015]
 unique_name_in_owner = true
 layout_mode = 2
 text = "0.25"
 alignment = 1
 select_all_on_focus = true
 
-[node name="TextureDropZone" type="PanelContainer" parent="SettingsContainer"]
+[node name="TextureDropZone" type="PanelContainer" parent="SettingsContainer" unique_id=2015084713]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 100)
 layout_mode = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_iprrl")
 script = ExtResource("3_tiebu")
 
-[node name="HSeparator3" type="HSeparator" parent="SettingsContainer"]
+[node name="HSeparator3" type="HSeparator" parent="SettingsContainer" unique_id=1712255226]
 layout_mode = 2
 
-[node name="MaskContainer" type="VBoxContainer" parent="."]
+[node name="MaskContainer" type="VBoxContainer" parent="." unique_id=1821844124]
 layout_mode = 2
 script = ExtResource("2_gpvri")
 title = "Smart Masking"
 
-[node name="HBoxContainerMaskSlope" type="HBoxContainer" parent="MaskContainer"]
+[node name="HBoxContainerMaskSlope" type="HBoxContainer" parent="MaskContainer" unique_id=1445295728]
 layout_mode = 2
 
-[node name="MaskSlopeCheck" type="CheckBox" parent="MaskContainer/HBoxContainerMaskSlope"]
+[node name="MaskSlopeCheck" type="CheckBox" parent="MaskContainer/HBoxContainerMaskSlope" unique_id=1437535180]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Enable Slope Mask"
 
-[node name="MaskSlopeInvert" type="CheckBox" parent="MaskContainer/HBoxContainerMaskSlope"]
+[node name="MaskSlopeInvert" type="CheckBox" parent="MaskContainer/HBoxContainerMaskSlope" unique_id=941207309]
 unique_name_in_owner = true
 modulate = Color(1, 1, 1, 0.5)
 layout_mode = 2
@@ -205,17 +205,17 @@ size_flags_horizontal = 3
 disabled = true
 text = "Invert (Walls)"
 
-[node name="GridContainerMaskSlope" type="GridContainer" parent="MaskContainer"]
+[node name="GridContainerMaskSlope" type="GridContainer" parent="MaskContainer" unique_id=282485978]
 layout_mode = 2
 columns = 3
 
-[node name="MaskSlopeLabel" type="Label" parent="MaskContainer/GridContainerMaskSlope"]
+[node name="MaskSlopeLabel" type="Label" parent="MaskContainer/GridContainerMaskSlope" unique_id=231338223]
 unique_name_in_owner = true
 modulate = Color(1, 1, 1, 0.5)
 layout_mode = 2
 text = "Angle:"
 
-[node name="MaskSlopeSlider" type="HSlider" parent="MaskContainer/GridContainerMaskSlope"]
+[node name="MaskSlopeSlider" type="HSlider" parent="MaskContainer/GridContainerMaskSlope" unique_id=1964747951]
 unique_name_in_owner = true
 modulate = Color(1, 1, 1, 0.5)
 layout_mode = 2
@@ -224,7 +224,7 @@ max_value = 90.0
 value = 45.0
 editable = false
 
-[node name="MaskSlopeValue" type="LineEdit" parent="MaskContainer/GridContainerMaskSlope"]
+[node name="MaskSlopeValue" type="LineEdit" parent="MaskContainer/GridContainerMaskSlope" unique_id=1522625657]
 unique_name_in_owner = true
 modulate = Color(1, 1, 1, 0.5)
 layout_mode = 2
@@ -232,16 +232,16 @@ text = "45"
 alignment = 1
 editable = false
 
-[node name="HBoxContainerMaskCurvature" type="HBoxContainer" parent="MaskContainer"]
+[node name="HBoxContainerMaskCurvature" type="HBoxContainer" parent="MaskContainer" unique_id=1567668806]
 layout_mode = 2
 
-[node name="MaskCurvCheck" type="CheckBox" parent="MaskContainer/HBoxContainerMaskCurvature"]
+[node name="MaskCurvCheck" type="CheckBox" parent="MaskContainer/HBoxContainerMaskCurvature" unique_id=197738867]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Enable Curvature Mask"
 
-[node name="MaskCurvInvert" type="CheckBox" parent="MaskContainer/HBoxContainerMaskCurvature"]
+[node name="MaskCurvInvert" type="CheckBox" parent="MaskContainer/HBoxContainerMaskCurvature" unique_id=2083557326]
 unique_name_in_owner = true
 modulate = Color(1, 1, 1, 0.5)
 layout_mode = 2
@@ -249,17 +249,17 @@ size_flags_horizontal = 3
 disabled = true
 text = "Invert (Cavity)"
 
-[node name="GridContainerMaskCurvature" type="GridContainer" parent="MaskContainer"]
+[node name="GridContainerMaskCurvature" type="GridContainer" parent="MaskContainer" unique_id=1451130425]
 layout_mode = 2
 columns = 3
 
-[node name="MaskCurvLabel" type="Label" parent="MaskContainer/GridContainerMaskCurvature"]
+[node name="MaskCurvLabel" type="Label" parent="MaskContainer/GridContainerMaskCurvature" unique_id=1265147443]
 unique_name_in_owner = true
 modulate = Color(1, 1, 1, 0.5)
 layout_mode = 2
 text = "Sensitivity:"
 
-[node name="MaskCurvSlider" type="HSlider" parent="MaskContainer/GridContainerMaskCurvature"]
+[node name="MaskCurvSlider" type="HSlider" parent="MaskContainer/GridContainerMaskCurvature" unique_id=608929027]
 unique_name_in_owner = true
 modulate = Color(1, 1, 1, 0.5)
 layout_mode = 2
@@ -269,7 +269,7 @@ step = 0.01
 value = 0.5
 editable = false
 
-[node name="MaskCurvValue" type="LineEdit" parent="MaskContainer/GridContainerMaskCurvature"]
+[node name="MaskCurvValue" type="LineEdit" parent="MaskContainer/GridContainerMaskCurvature" unique_id=748507408]
 unique_name_in_owner = true
 modulate = Color(1, 1, 1, 0.5)
 layout_mode = 2
@@ -277,31 +277,31 @@ text = "0.5"
 alignment = 1
 editable = false
 
-[node name="HSeparator" type="HSeparator" parent="MaskContainer"]
+[node name="HSeparator" type="HSeparator" parent="MaskContainer" unique_id=2112533632]
 layout_mode = 2
 
-[node name="ToolsContainer" type="VBoxContainer" parent="."]
+[node name="ToolsContainer" type="VBoxContainer" parent="." unique_id=1746588890]
 layout_mode = 2
 script = ExtResource("2_gpvri")
 title = "Tools"
 
-[node name="HBoxContainer" type="HBoxContainer" parent="ToolsContainer"]
+[node name="HBoxContainer" type="HBoxContainer" parent="ToolsContainer" unique_id=141752169]
 layout_mode = 2
 
-[node name="BlendLabel" type="Label" parent="ToolsContainer/HBoxContainer"]
+[node name="BlendLabel" type="Label" parent="ToolsContainer/HBoxContainer" unique_id=558088805]
 layout_mode = 2
 theme_override_font_sizes/font_size = 12
 text = "   Blend Modes   "
 
-[node name="HSeparator" type="HSeparator" parent="ToolsContainer/HBoxContainer"]
+[node name="HSeparator" type="HSeparator" parent="ToolsContainer/HBoxContainer" unique_id=862572173]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="GridContainerBlendMode" type="GridContainer" parent="ToolsContainer"]
+[node name="GridContainerBlendMode" type="GridContainer" parent="ToolsContainer" unique_id=1449242131]
 layout_mode = 2
 columns = 3
 
-[node name="Add_Button" type="Button" parent="ToolsContainer/GridContainerBlendMode"]
+[node name="Add_Button" type="Button" parent="ToolsContainer/GridContainerBlendMode" unique_id=712238310]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
@@ -313,105 +313,105 @@ toggle_mode = true
 button_pressed = true
 text = "Add"
 
-[node name="Substract_Button" type="Button" parent="ToolsContainer/GridContainerBlendMode"]
+[node name="Substract_Button" type="Button" parent="ToolsContainer/GridContainerBlendMode" unique_id=492698789]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 toggle_mode = true
 text = "Substract"
 
-[node name="Set_Button" type="Button" parent="ToolsContainer/GridContainerBlendMode"]
+[node name="Set_Button" type="Button" parent="ToolsContainer/GridContainerBlendMode" unique_id=1595533097]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 toggle_mode = true
 text = "Replace"
 
-[node name="Blur_Button" type="Button" parent="ToolsContainer/GridContainerBlendMode"]
+[node name="Blur_Button" type="Button" parent="ToolsContainer/GridContainerBlendMode" unique_id=1982050324]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 toggle_mode = true
 text = "Blur"
 
-[node name="Sharpen_Button" type="Button" parent="ToolsContainer/GridContainerBlendMode"]
+[node name="Sharpen_Button" type="Button" parent="ToolsContainer/GridContainerBlendMode" unique_id=155748226]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 toggle_mode = true
 text = "Sharpen"
 
-[node name="HBoxContainer2" type="HBoxContainer" parent="ToolsContainer"]
+[node name="HBoxContainer2" type="HBoxContainer" parent="ToolsContainer" unique_id=987134698]
 layout_mode = 2
 
-[node name="FillLabel" type="Label" parent="ToolsContainer/HBoxContainer2"]
+[node name="FillLabel" type="Label" parent="ToolsContainer/HBoxContainer2" unique_id=941027433]
 layout_mode = 2
 theme_override_font_sizes/font_size = 12
 text = "   Fill Modes   "
 
-[node name="HSeparator2" type="HSeparator" parent="ToolsContainer/HBoxContainer2"]
+[node name="HSeparator2" type="HSeparator" parent="ToolsContainer/HBoxContainer2" unique_id=55023948]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="GridContainerProcessing" type="GridContainer" parent="ToolsContainer"]
+[node name="GridContainerProcessing" type="GridContainer" parent="ToolsContainer" unique_id=912141010]
 layout_mode = 2
 columns = 2
 
-[node name="Fill_Button" type="Button" parent="ToolsContainer/GridContainerProcessing"]
+[node name="Fill_Button" type="Button" parent="ToolsContainer/GridContainerProcessing" unique_id=406670566]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Flood
 "
 
-[node name="Clear_Button" type="Button" parent="ToolsContainer/GridContainerProcessing"]
+[node name="Clear_Button" type="Button" parent="ToolsContainer/GridContainerProcessing" unique_id=2086326823]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Clear"
 
-[node name="Proc_TopDown_Btn" type="Button" parent="ToolsContainer/GridContainerProcessing"]
+[node name="Proc_TopDown_Btn" type="Button" parent="ToolsContainer/GridContainerProcessing" unique_id=1467471973]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Top/Down"
 
-[node name="Proc_BottomUp_Btn" type="Button" parent="ToolsContainer/GridContainerProcessing"]
+[node name="Proc_BottomUp_Btn" type="Button" parent="ToolsContainer/GridContainerProcessing" unique_id=1272481403]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Bottom/Up"
 
-[node name="Proc_Slope_Btn" type="Button" parent="ToolsContainer/GridContainerProcessing"]
+[node name="Proc_Slope_Btn" type="Button" parent="ToolsContainer/GridContainerProcessing" unique_id=1292347358]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Slope"
 
-[node name="Proc_Noise_Btn" type="Button" parent="ToolsContainer/GridContainerProcessing"]
+[node name="Proc_Noise_Btn" type="Button" parent="ToolsContainer/GridContainerProcessing" unique_id=1521984257]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Noise"
 
-[node name="HSeparator" type="HSeparator" parent="ToolsContainer"]
+[node name="HSeparator" type="HSeparator" parent="ToolsContainer" unique_id=1033583547]
 layout_mode = 2
 
-[node name="ProductionContainer" type="VBoxContainer" parent="."]
+[node name="ProductionContainer" type="VBoxContainer" parent="." unique_id=291449785]
 layout_mode = 2
 script = ExtResource("2_gpvri")
 title = "Production"
 
-[node name="HBoxContainer" type="HBoxContainer" parent="ProductionContainer"]
+[node name="HBoxContainer" type="HBoxContainer" parent="ProductionContainer" unique_id=1075663126]
 layout_mode = 2
 
-[node name="Bake_Button" type="Button" parent="ProductionContainer/HBoxContainer"]
+[node name="Bake_Button" type="Button" parent="ProductionContainer/HBoxContainer" unique_id=2120793614]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Bake to Mesh"
 
-[node name="Revert_Button" type="Button" parent="ProductionContainer/HBoxContainer"]
+[node name="Revert_Button" type="Button" parent="ProductionContainer/HBoxContainer" unique_id=692568106]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
