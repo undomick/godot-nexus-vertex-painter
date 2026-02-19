@@ -105,14 +105,10 @@ jobs:
         id: changelog
         run: |
           VERSION="${GITHUB_REF#refs/tags/v}"
-          SAFE_VERSION=$(echo "$VERSION" | sed 's/\./\\./g')
-          CHANGELOG_SECTION=$(awk '/^## \['"$SAFE_VERSION"'\]/,/^## \[/' CHANGELOG.md | head -n -1 || true)
-          if [ -z "$CHANGELOG_SECTION" ]; then
-            CHANGELOG_SECTION="See CHANGELOG.md for details."
-          fi
+          CHANGELOG_SECTION=$(VERSION="$VERSION" python3 .github/scripts/extract_changelog.py)
           {
             echo 'body<<RELEASE_BODY'
-            echo "$CHANGELOG_SECTION"
+            printf '%s' "$CHANGELOG_SECTION"
             echo ""
             echo "### Installation"
             echo "1. Download the archive for your platform."

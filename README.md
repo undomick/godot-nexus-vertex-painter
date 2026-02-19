@@ -34,6 +34,15 @@ For large meshes, the C++ GDExtension significantly improves painting speed. See
 
 **Pre-built binaries**: Check [Releases](https://github.com/undomick/godot-nexus-vertex-painter/releases) for Windows, Linux, and macOS binaries.
 
+### Building from Source (C++ GDExtension)
+
+If you work on the source code and need to build the C++ extension:
+
+1. Run `.\scripts\install_dependencies.ps1` to clone godot-cpp and init submodules
+2. Run `pip install scons`, then `cd src` and `scons platform=windows target=editor` (or linux/macos)
+
+See [src/README.md](src/README.md) for detailed build instructions.
+
 ## Usage
 
 1. Open a 3D scene with `MeshInstance3D` nodes
@@ -61,6 +70,9 @@ nexus_vertexpainter/
 ├── src/                     # C++ GDExtension source (optional build)
 │   ├── vertex_painter_core.cpp
 │   └── README.md            # Build instructions
+├── scripts/                 # Build & release helpers
+│   ├── transfer_release.ps1     # Export release files (excludes .cursor, mcps, etc.)
+│   └── install_dependencies.ps1 # Clone godot-cpp for C++ build
 ├── LICENSE
 └── README.md
 ```

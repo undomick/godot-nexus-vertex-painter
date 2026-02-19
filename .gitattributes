@@ -1,9 +1,2 @@
-# 1. Set default behavior to automatically normalize line endings.
-* text=auto
-
-# 2. Ignore files that are not needed in the repository or should not be shared.
-* export-ignore
-
-# 3. Exception: Include specific files or directories that are necessary for the repository.
-game/addons/ -export-ignore
-game/addons/** -export-ignore
+# Normalize line endings for text files
+* text=auto eol=lf
