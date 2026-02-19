@@ -1,7 +1,2 @@
 # Normalize line endings for text files
 * text=auto eol=lf
-
-# Source code zip (from GitHub releases): only include addons/
-* export-ignore
-game/addons/ -export-ignore
-game/addons/** -export-ignore
