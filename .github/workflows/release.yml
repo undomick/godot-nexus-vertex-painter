@@ -45,7 +45,7 @@ jobs:
       - name: Install SCons (macOS)
         if: matrix.platform == 'macos'
         run: |
-          brew install scons
+          python3 -m pip install --break-system-packages scons
           scons --version
 
       - name: Build godot-cpp
