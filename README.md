@@ -1,29 +1,80 @@
-# Nexus Vertex Painter for Godot 4
+# Nexus Vertex Painter
+
 [![Discord](https://img.shields.io/discord/1446024019341086864?label=Discord&logo=discord&style=flat-square&color=5865F2)](https://discord.gg/HMxbzqWCgQ)
 [![Ko-fi](https://img.shields.io/badge/Support%20me-Ko--fi-F16061?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/jundrie)
 
-A tool for manual painting and procedural generation of vertex color channels on 3D meshes.
-Designed to feel close to Unreal Engine's mesh painting workflow.
+A professional vertex color painting tool for Godot 4.2+ that supports manual brush painting and procedural generation on 3D meshes. Based on [undomick/godot-nexus-vertex-painter](https://github.com/undomick/godot-nexus-vertex-painter) with additional C++ GDExtension and extended features.
 
 ## Features
-*   🎨 **Real-time Painting:** Paint vertex colors directly in the 3D viewport.
-*   🛠️ **Procedural Tools:** Apply Height, Slope, and Noise masks instantly.
-*   🔒 **Selection Locking:** Automatically hides gizmos while painting to prevent accidental movement.
-*   🖌️ **Visual Feedback:** Brush cursor adapts to terrain and shows active channels.
-*   🚀 **Multi-Object Support:** Paint across multiple selected meshes seamlessly.
+
+- **Manual Painting**: Add, Subtract, Set, Blur, and Sharpen modes with brush textures
+- **Procedural Generation**: Top-down, slope, bottom-up, and noise-based painting
+- **Smart Masking**: Slope and curvature masks for precise control
+- **Fill & Clear**: Batch operations per channel (RGBA)
+- **Bake & Revert**: Save to mesh file or revert to original
+- **Undo/Redo**: Full editor integration
+- **C++ GDExtension**: Optional native performance boost
+
+## Requirements
+
+- Godot 4.2 or later (tested with 4.6)
+- For maximum performance: pre-built GDExtension binaries (see Installation)
 
 ## Installation
-1. Download the latest release (or clone this repo).
-2. Copy the `addons/nexus_vertex_painter` folder into your project's `addons/` folder.
-3. Go to **Project -> Project Settings -> Plugins** and enable "Nexus Vertex Painter".
+
+### Quick Install (GDScript only)
+
+1. Copy the `addons/nexus_vertex_painter` folder into your project's `addons/` directory
+2. Enable the addon in Project → Project Settings → Plugins
+3. The addon works immediately with the GDScript fallback
+
+### With C++ for Better Performance
+
+For large meshes, the C++ GDExtension significantly improves painting speed. See [docs/INSTALL.md](docs/INSTALL.md) for build instructions.
+
+**Pre-built binaries**: Check [Releases](https://github.com/undomick/godot-nexus-vertex-painter/releases) for Windows, Linux, and macOS binaries.
 
 ## Usage
-1. Select one or multiple MeshInstances.
-2. Click the **"Vertex Paint"** button in the top toolbar.
-3. Use the dock on the right to configure your brush and paint!
 
-## 💬 Support & Community
+1. Open a 3D scene with `MeshInstance3D` nodes
+2. Select one or more meshes
+3. Click **Vertex Paint** in the 3D editor toolbar (or Spatial menu)
+4. Use the dock panel to configure brush settings and paint
 
-Join the Discord server to ask questions, suggest features, or show off your projects made with this addon!
+### Shortcuts
 
-<a href="https://discord.gg/HMxbzqWCgQ"><img src="https://img.shields.io/badge/Join-Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Join Discord"></a> <a href="https://ko-fi.com/jundrie"><img src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-F16061?style=for-the-badge&logo=ko-fi&logoColor=white" alt="Support me on Ko-fi"></a>
+| Shortcut | Action |
+|----------|--------|
+| X / Y / Z | Cycle brush mode (Add → Subtract → Set → Blur → Sharpen) |
+| 1–4 | Toggle R / G / B / A channels |
+| Ctrl + Right Mouse | Adjust brush size (vertical) and strength (horizontal) |
+| Shift + Right Mouse | Adjust falloff (vertical) and brush rotation (horizontal) |
+
+## Project Structure
+
+```
+nexus_vertexpainter/
+├── game/                    # Godot project & demo
+│   ├── addons/
+│   │   └── nexus_vertex_painter/   # Addon files
+│   └── project.godot
+├── src/                     # C++ GDExtension source (optional build)
+│   ├── vertex_painter_core.cpp
+│   └── README.md            # Build instructions
+├── LICENSE
+└── README.md
+```
+
+## Support & Community
+
+Join the [Discord server](https://discord.gg/HMxbzqWCgQ) to ask questions, suggest features, or show off your projects made with this addon.
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+
+### Third-Party Attribution
+
+- **Nexus Vertex Painter** ([undomick/godot-nexus-vertex-painter](https://github.com/undomick/godot-nexus-vertex-painter)): MIT License – original addon
+- **godot-cpp**: MIT License – used for GDExtension bindings
+- **Godot Engine**: MIT License – game engine

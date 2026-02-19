@@ -1,0 +1,20 @@
+[configuration]
+
+entry_symbol = "nexus_vertex_painter_library_init"
+compatibility_minimum = "4.2"
+reloadable = true
+
+[libraries]
+
+; Editor (for development in Godot editor)
+windows.editor.x86_64 = "res://addons/nexus_vertex_painter/bin/windows/nexus_vertex_painter.windows.editor.x86_64.dll"
+linux.editor.x86_64 = "res://addons/nexus_vertex_painter/bin/linux/nexus_vertex_painter.linux.editor.x86_64.so"
+macos.editor.universal = "res://addons/nexus_vertex_painter/bin/macos/nexus_vertex_painter.macos.editor.universal.dylib"
+
+; Template (for exported games)
+windows.debug.x86_64 = "res://addons/nexus_vertex_painter/bin/windows/nexus_vertex_painter.windows.template_debug.x86_64.dll"
+windows.release.x86_64 = "res://addons/nexus_vertex_painter/bin/windows/nexus_vertex_painter.windows.template_release.x86_64.dll"
+linux.debug.x86_64 = "res://addons/nexus_vertex_painter/bin/linux/nexus_vertex_painter.linux.template_debug.x86_64.so"
+linux.release.x86_64 = "res://addons/nexus_vertex_painter/bin/linux/nexus_vertex_painter.linux.template_release.x86_64.so"
+macos.debug.universal = "res://addons/nexus_vertex_painter/bin/macos/nexus_vertex_painter.macos.template_debug.universal.dylib"
+macos.release.universal = "res://addons/nexus_vertex_painter/bin/macos/nexus_vertex_painter.macos.template_release.universal.dylib"

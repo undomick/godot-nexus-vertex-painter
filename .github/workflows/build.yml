@@ -1,0 +1,118 @@
+name: Build GDExtension
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  GODOT_VERSION: "4.2.2"
+
+jobs:
+  build-linux:
+    name: Linux
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Python & SCons
+        run: |
+          sudo apt-get update
+          python3 -m pip install scons
+          scons --version
+
+      - name: Build godot-cpp
+        working-directory: src/godot-cpp
+        env:
+          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
+        run: |
+          scons platform=linux target=editor arch=x86_64 -j$(nproc)
+
+      - name: Build extension
+        working-directory: src
+        env:
+          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
+        run: |
+          scons platform=linux target=editor arch=x86_64 -j$(nproc)
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-editor-x86_64
+          path: game/addons/nexus_vertex_painter/bin/linux/
+
+  build-windows:
+    name: Windows
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install mingw64
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64
+          sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix || true
+          sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix || true
+
+      - name: Install Python & SCons
+        run: |
+          python3 -m pip install scons
+          scons --version
+
+      - name: Build godot-cpp
+        working-directory: src/godot-cpp
+        env:
+          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
+        run: |
+          scons platform=windows target=editor arch=x86_64 -j$(nproc)
+
+      - name: Build extension
+        working-directory: src
+        env:
+          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
+        run: |
+          scons platform=windows target=editor arch=x86_64 -j$(nproc)
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-editor-x86_64
+          path: game/addons/nexus_vertex_painter/bin/windows/
+
+  build-macos:
+    name: macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install SCons
+        run: |
+          python3 -m pip install scons
+          scons --version
+
+      - name: Build godot-cpp
+        working-directory: src/godot-cpp
+        env:
+          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
+        run: |
+          scons platform=macos target=editor arch=universal -j$(sysctl -n hw.ncpu)
+
+      - name: Build extension
+        working-directory: src
+        env:
+          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
+        run: |
+          scons platform=macos target=editor arch=universal -j$(sysctl -n hw.ncpu)
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-editor-universal
+          path: game/addons/nexus_vertex_painter/bin/macos/

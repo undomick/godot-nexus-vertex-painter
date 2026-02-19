@@ -1,0 +1,5 @@
+# Build output (local - also copied to addon bin/)
+bin/
+
+# godot-cpp (clone manually or via submodule)
+# godot-cpp/

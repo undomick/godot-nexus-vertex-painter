@@ -1,0 +1,114 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-and-release:
+    name: Build and Release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            platform: linux
+            artifact-name: linux-editor-x86_64
+          - os: ubuntu-22.04
+            platform: windows
+            artifact-name: windows-editor-x86_64
+          - os: macos-latest
+            platform: macos
+            artifact-name: macos-editor-universal
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: (Windows) Install mingw64
+        if: matrix.platform == 'windows'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64
+          sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix || true
+          sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix || true
+
+      - name: Install Python & SCons
+        run: |
+          python3 -m pip install scons
+          scons --version
+
+      - name: Build godot-cpp
+        working-directory: src/godot-cpp
+        env:
+          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
+        run: |
+          if [ "${{ matrix.platform }}" = "macos" ]; then
+            scons platform=macos target=editor arch=universal -j$(sysctl -n hw.ncpu)
+          else
+            scons platform=${{ matrix.platform }} target=editor arch=x86_64 -j$(nproc)
+          fi
+
+      - name: Build extension
+        working-directory: src
+        env:
+          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
+        run: |
+          if [ "${{ matrix.platform }}" = "macos" ]; then
+            scons platform=macos target=editor arch=universal -j$(sysctl -n hw.ncpu)
+          else
+            scons platform=${{ matrix.platform }} target=editor arch=x86_64 -j$(nproc)
+          fi
+
+      - name: Upload ${{ matrix.artifact-name }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: game/addons/nexus_vertex_painter/bin/${{ matrix.platform }}/
+
+  create-release:
+    name: Create Release
+    needs: build-and-release
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create release archives
+        run: |
+          cd artifacts
+          for dir in */; do
+            zip -r "../${dir%/}.zip" "$dir"
+          done
+          cd ..
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body: |
+            ## Nexus Vertex Painter ${{ github.ref_name }}
+
+            Pre-built GDExtension binaries for Godot 4.2+.
+
+            ### Installation
+            1. Download the archive for your platform.
+            2. Extract into your project's `addons/nexus_vertex_painter/bin/` folder.
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+          files: |
+            *.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

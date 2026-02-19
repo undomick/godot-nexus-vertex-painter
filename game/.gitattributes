@@ -1,0 +1,12 @@
+# Normalize EOL for all files that Git considers text files.
+* text=auto eol=lf
+
+# Ignoriere ALLES standardmäßig beim Export
+* export-ignore
+
+# Include only nexus_vertex_painter for export (Asset Library / releases)
+addons/ -export-ignore
+addons/** -export-ignore
+# Exclude nexus_importer from exports (not part of this addon)
+addons/nexus_importer export-ignore
+addons/nexus_importer/** export-ignore

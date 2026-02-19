@@ -1,0 +1,420 @@
+[gd_scene load_steps=7 format=3 uid="uid://frmsqrvckd2f"]
+
+[ext_resource type="Script" uid="uid://cbea58btcl6c" path="res://addons/nexus_vertex_painter/painter_dock.gd" id="1_6ldxv"]
+[ext_resource type="Script" uid="uid://ccdx60vdnraf7" path="res://addons/nexus_vertex_painter/UI/collapsible_category.gd" id="2_gpvri"]
+[ext_resource type="Script" uid="uid://c4022nlyaxnn7" path="res://addons/nexus_vertex_painter/UI/texture_drop_zone.gd" id="3_tiebu"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tiebu"]
+bg_color = Color(0.8, 0.2, 0.2, 0.4)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(1, 0.4, 0.4, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_iprrl"]
+bg_color = Color(0.1, 0.1, 0.1, 0.5)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.3, 0.3, 0.3, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_6xn7i"]
+bg_color = Color(0, 0, 0, 0.4)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0, 0, 0, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[node name="PainterDock" type="VBoxContainer"]
+process_mode = 4
+modulate = Color(0.5, 0.5, 0.5, 0.5)
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_6ldxv")
+
+[node name="ChannelContainer" type="VBoxContainer" parent="."]
+layout_mode = 2
+script = ExtResource("2_gpvri")
+title = "Channels"
+
+[node name="ChannelGridContainer" type="GridContainer" parent="ChannelContainer"]
+layout_mode = 2
+columns = 4
+
+[node name="R_Btn" type="Button" parent="ChannelContainer/ChannelGridContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/normal = SubResource("StyleBoxFlat_tiebu")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_tiebu")
+theme_override_styles/hover = SubResource("StyleBoxFlat_tiebu")
+theme_override_styles/hover_pressed = SubResource("StyleBoxFlat_tiebu")
+theme_override_styles/focus = SubResource("StyleBoxFlat_tiebu")
+toggle_mode = true
+button_pressed = true
+text = "R"
+
+[node name="G_Btn" type="Button" parent="ChannelContainer/ChannelGridContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+text = "G"
+
+[node name="B_Btn" type="Button" parent="ChannelContainer/ChannelGridContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+text = "B"
+
+[node name="A_Btn" type="Button" parent="ChannelContainer/ChannelGridContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+text = "A"
+
+[node name="HSeparator2" type="HSeparator" parent="ChannelContainer"]
+layout_mode = 2
+
+[node name="SettingsContainer" type="VBoxContainer" parent="."]
+layout_mode = 2
+script = ExtResource("2_gpvri")
+title = "Settings"
+
+[node name="GridContainerSettings" type="GridContainer" parent="SettingsContainer"]
+layout_mode = 2
+columns = 3
+
+[node name="BrushSize_Label" type="Label" parent="SettingsContainer/GridContainerSettings"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Size :"
+
+[node name="BrushSizeSlider" type="HSlider" parent="SettingsContainer/GridContainerSettings"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+localize_numeral_system = false
+accessibility_name = "Brush Size"
+min_value = 0.01
+max_value = 10.0
+step = 0.01
+value = 1.0
+
+[node name="BrushSizeLineEdit" type="LineEdit" parent="SettingsContainer/GridContainerSettings"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "1.0"
+alignment = 1
+select_all_on_focus = true
+
+[node name="BrushFalloff_Label" type="Label" parent="SettingsContainer/GridContainerSettings"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Falloff :"
+
+[node name="BrushFalloffSlider" type="HSlider" parent="SettingsContainer/GridContainerSettings"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+accessibility_name = "Brush Size"
+max_value = 1.0
+step = 0.01
+value = 0.5
+
+[node name="BrushSizeLineEdit2" type="LineEdit" parent="SettingsContainer/GridContainerSettings"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0.5"
+alignment = 1
+select_all_on_focus = true
+
+[node name="BrushStrength_Label" type="Label" parent="SettingsContainer/GridContainerSettings"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "Strength : "
+
+[node name="BrushStrengthSlider" type="HSlider" parent="SettingsContainer/GridContainerSettings"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+accessibility_name = "Brush Strength"
+min_value = 0.01
+max_value = 1.0
+step = 0.01
+value = 0.25
+
+[node name="BrushSizeLineEdit3" type="LineEdit" parent="SettingsContainer/GridContainerSettings"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "0.25"
+alignment = 1
+select_all_on_focus = true
+
+[node name="TextureDropZone" type="PanelContainer" parent="SettingsContainer"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_iprrl")
+script = ExtResource("3_tiebu")
+
+[node name="HSeparator3" type="HSeparator" parent="SettingsContainer"]
+layout_mode = 2
+
+[node name="MaskContainer" type="VBoxContainer" parent="."]
+layout_mode = 2
+script = ExtResource("2_gpvri")
+title = "Smart Masking"
+
+[node name="HBoxContainerMaskSlope" type="HBoxContainer" parent="MaskContainer"]
+layout_mode = 2
+
+[node name="MaskSlopeCheck" type="CheckBox" parent="MaskContainer/HBoxContainerMaskSlope"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Enable Slope Mask"
+
+[node name="MaskSlopeInvert" type="CheckBox" parent="MaskContainer/HBoxContainerMaskSlope"]
+unique_name_in_owner = true
+modulate = Color(1, 1, 1, 0.5)
+layout_mode = 2
+size_flags_horizontal = 3
+disabled = true
+text = "Invert (Walls)"
+
+[node name="GridContainerMaskSlope" type="GridContainer" parent="MaskContainer"]
+layout_mode = 2
+columns = 3
+
+[node name="MaskSlopeLabel" type="Label" parent="MaskContainer/GridContainerMaskSlope"]
+unique_name_in_owner = true
+modulate = Color(1, 1, 1, 0.5)
+layout_mode = 2
+text = "Angle:"
+
+[node name="MaskSlopeSlider" type="HSlider" parent="MaskContainer/GridContainerMaskSlope"]
+unique_name_in_owner = true
+modulate = Color(1, 1, 1, 0.5)
+layout_mode = 2
+size_flags_horizontal = 3
+max_value = 90.0
+value = 45.0
+editable = false
+
+[node name="MaskSlopeValue" type="LineEdit" parent="MaskContainer/GridContainerMaskSlope"]
+unique_name_in_owner = true
+modulate = Color(1, 1, 1, 0.5)
+layout_mode = 2
+text = "45"
+alignment = 1
+editable = false
+
+[node name="HBoxContainerMaskCurvature" type="HBoxContainer" parent="MaskContainer"]
+layout_mode = 2
+
+[node name="MaskCurvCheck" type="CheckBox" parent="MaskContainer/HBoxContainerMaskCurvature"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Enable Curvature Mask"
+
+[node name="MaskCurvInvert" type="CheckBox" parent="MaskContainer/HBoxContainerMaskCurvature"]
+unique_name_in_owner = true
+modulate = Color(1, 1, 1, 0.5)
+layout_mode = 2
+size_flags_horizontal = 3
+disabled = true
+text = "Invert (Cavity)"
+
+[node name="GridContainerMaskCurvature" type="GridContainer" parent="MaskContainer"]
+layout_mode = 2
+columns = 3
+
+[node name="MaskCurvLabel" type="Label" parent="MaskContainer/GridContainerMaskCurvature"]
+unique_name_in_owner = true
+modulate = Color(1, 1, 1, 0.5)
+layout_mode = 2
+text = "Sensitivity:"
+
+[node name="MaskCurvSlider" type="HSlider" parent="MaskContainer/GridContainerMaskCurvature"]
+unique_name_in_owner = true
+modulate = Color(1, 1, 1, 0.5)
+layout_mode = 2
+size_flags_horizontal = 3
+max_value = 1.0
+step = 0.01
+value = 0.5
+editable = false
+
+[node name="MaskCurvValue" type="LineEdit" parent="MaskContainer/GridContainerMaskCurvature"]
+unique_name_in_owner = true
+modulate = Color(1, 1, 1, 0.5)
+layout_mode = 2
+text = "0.5"
+alignment = 1
+editable = false
+
+[node name="HSeparator" type="HSeparator" parent="MaskContainer"]
+layout_mode = 2
+
+[node name="ToolsContainer" type="VBoxContainer" parent="."]
+layout_mode = 2
+script = ExtResource("2_gpvri")
+title = "Tools"
+
+[node name="HBoxContainer" type="HBoxContainer" parent="ToolsContainer"]
+layout_mode = 2
+
+[node name="BlendLabel" type="Label" parent="ToolsContainer/HBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "   Blend Modes   "
+
+[node name="HSeparator" type="HSeparator" parent="ToolsContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="GridContainerBlendMode" type="GridContainer" parent="ToolsContainer"]
+layout_mode = 2
+columns = 3
+
+[node name="Add_Button" type="Button" parent="ToolsContainer/GridContainerBlendMode"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/normal = SubResource("StyleBoxFlat_6xn7i")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_6xn7i")
+theme_override_styles/hover = SubResource("StyleBoxFlat_6xn7i")
+theme_override_styles/hover_pressed = SubResource("StyleBoxFlat_6xn7i")
+theme_override_styles/focus = SubResource("StyleBoxFlat_6xn7i")
+toggle_mode = true
+button_pressed = true
+text = "Add"
+
+[node name="Substract_Button" type="Button" parent="ToolsContainer/GridContainerBlendMode"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+text = "Substract"
+
+[node name="Set_Button" type="Button" parent="ToolsContainer/GridContainerBlendMode"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+text = "Replace"
+
+[node name="Blur_Button" type="Button" parent="ToolsContainer/GridContainerBlendMode"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+text = "Blur"
+
+[node name="Sharpen_Button" type="Button" parent="ToolsContainer/GridContainerBlendMode"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+toggle_mode = true
+text = "Sharpen"
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="ToolsContainer"]
+layout_mode = 2
+
+[node name="FillLabel" type="Label" parent="ToolsContainer/HBoxContainer2"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 12
+text = "   Fill Modes   "
+
+[node name="HSeparator2" type="HSeparator" parent="ToolsContainer/HBoxContainer2"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="GridContainerProcessing" type="GridContainer" parent="ToolsContainer"]
+layout_mode = 2
+columns = 2
+
+[node name="Fill_Button" type="Button" parent="ToolsContainer/GridContainerProcessing"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Flood
+"
+
+[node name="Clear_Button" type="Button" parent="ToolsContainer/GridContainerProcessing"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Clear"
+
+[node name="Proc_TopDown_Btn" type="Button" parent="ToolsContainer/GridContainerProcessing"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Top/Down"
+
+[node name="Proc_BottomUp_Btn" type="Button" parent="ToolsContainer/GridContainerProcessing"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Bottom/Up"
+
+[node name="Proc_Slope_Btn" type="Button" parent="ToolsContainer/GridContainerProcessing"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Slope"
+
+[node name="Proc_Noise_Btn" type="Button" parent="ToolsContainer/GridContainerProcessing"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Noise"
+
+[node name="HSeparator" type="HSeparator" parent="ToolsContainer"]
+layout_mode = 2
+
+[node name="ProductionContainer" type="VBoxContainer" parent="."]
+layout_mode = 2
+script = ExtResource("2_gpvri")
+title = "Production"
+
+[node name="HBoxContainer" type="HBoxContainer" parent="ProductionContainer"]
+layout_mode = 2
+
+[node name="Bake_Button" type="Button" parent="ProductionContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Bake to Mesh"
+
+[node name="Revert_Button" type="Button" parent="ProductionContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Revert to Original"
