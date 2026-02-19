@@ -101,6 +101,12 @@ jobs:
           done
           cd ..
 
+      - name: Create addons-only source zip
+        run: |
+          mkdir -p addons
+          cp -r game/addons/nexus_vertex_painter addons/
+          zip -r "godot-nexus-vertex-painter-addons-${{ github.ref_name }}.zip" addons
+
       - name: Extract changelog for release
         id: changelog
         run: |
@@ -111,8 +117,14 @@ jobs:
             printf '%s' "$CHANGELOG_SECTION"
             echo ""
             echo "### Installation"
-            echo "1. Download the archive for your platform."
+            echo ""
+            echo "**GDExtension (recommended):**"
+            echo "1. Download the archive for your platform (linux/windows/macos)."
             echo "2. Extract into your project's \`addons/nexus_vertex_painter/bin/\` folder."
+            echo ""
+            echo "**Addon only (GDScript fallback):**"
+            echo "1. Download \`godot-nexus-vertex-painter-addons-\${{ github.ref_name }}.zip\`"
+            echo "2. Extract into your project – the \`addons/\` folder merges with your project's \`addons/\`."
             echo "RELEASE_BODY"
           } >> $GITHUB_OUTPUT
 
