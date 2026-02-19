@@ -101,18 +101,30 @@ jobs:
           done
           cd ..
 
+      - name: Extract changelog for release
+        id: changelog
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          SAFE_VERSION=$(echo "$VERSION" | sed 's/\./\\./g')
+          CHANGELOG_SECTION=$(awk '/^## \['"$SAFE_VERSION"'\]/,/^## \[/' CHANGELOG.md | head -n -1 || true)
+          if [ -z "$CHANGELOG_SECTION" ]; then
+            CHANGELOG_SECTION="See CHANGELOG.md for details."
+          fi
+          {
+            echo 'body<<RELEASE_BODY'
+            echo "$CHANGELOG_SECTION"
+            echo ""
+            echo "### Installation"
+            echo "1. Download the archive for your platform."
+            echo "2. Extract into your project's \`addons/nexus_vertex_painter/bin/\` folder."
+            echo "RELEASE_BODY"
+          } >> $GITHUB_OUTPUT
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ github.ref_name }}
-          body: |
-            ## Nexus Vertex Painter ${{ github.ref_name }}
-
-            Pre-built GDExtension binaries for Godot 4.2+.
-
-            ### Installation
-            1. Download the archive for your platform.
-            2. Extract into your project's `addons/nexus_vertex_painter/bin/` folder.
+          body: ${{ steps.changelog.outputs.body }}
           draft: false
           prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
           files: |
