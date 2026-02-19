@@ -36,9 +36,16 @@ jobs:
           sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix || true
           sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix || true
 
-      - name: Install Python & SCons
+      - name: Install SCons (Linux/Windows)
+        if: matrix.platform != 'macos'
         run: |
           python3 -m pip install scons
+          scons --version
+
+      - name: Install SCons (macOS)
+        if: matrix.platform == 'macos'
+        run: |
+          brew install scons
           scons --version
 
       - name: Build godot-cpp

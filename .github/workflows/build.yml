@@ -94,7 +94,7 @@ jobs:
 
       - name: Install SCons
         run: |
-          python3 -m pip install scons
+          brew install scons
           scons --version
 
       - name: Build godot-cpp
