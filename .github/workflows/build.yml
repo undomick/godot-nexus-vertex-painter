@@ -6,17 +6,61 @@ on:
   pull_request:
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   GODOT_VERSION: "4.2.2"
 
 jobs:
+  changes:
+    name: Check changes
+    runs-on: ubuntu-latest
+    outputs:
+      src: ${{ steps.result.outputs.src }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        if: github.event_name != 'workflow_dispatch'
+        with:
+          filters: |
+            src:
+              - 'src/**'
+              - 'game/addons/nexus_vertex_painter/**'
+
+      - id: result
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "src=true" >> $GITHUB_OUTPUT
+          else
+            echo "src=${{ steps.filter.outputs.src }}" >> $GITHUB_OUTPUT
+          fi
+
   build-linux:
     name: Linux
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.src == 'true'
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Add GCC problem matcher
+        run: echo "::add-matcher::${{ github.workspace }}/.github/gcc-problem-matcher.json"
+
+      - name: Cache SCons build
+        uses: actions/cache@v4
+        with:
+          path: .scons-cache
+          key: scons-Linux-linux-${{ hashFiles('src/godot-cpp/SConstruct', 'src/SConstruct', 'src/vertex_painter_core.cpp', 'src/vertex_painter_core.h') }}
+          restore-keys: |
+            scons-Linux-linux-
 
       - name: Install Python & SCons
         run: |
@@ -46,11 +90,24 @@ jobs:
 
   build-windows:
     name: Windows
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.src == 'true'
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Add GCC problem matcher
+        run: echo "::add-matcher::${{ github.workspace }}/.github/gcc-problem-matcher.json"
+
+      - name: Cache SCons build
+        uses: actions/cache@v4
+        with:
+          path: .scons-cache
+          key: scons-Linux-windows-${{ hashFiles('src/godot-cpp/SConstruct', 'src/SConstruct', 'src/vertex_painter_core.cpp', 'src/vertex_painter_core.h') }}
+          restore-keys: |
+            scons-Linux-windows-
 
       - name: Install mingw64
         run: |
@@ -86,11 +143,24 @@ jobs:
 
   build-macos:
     name: macOS
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.src == 'true'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Add GCC problem matcher
+        run: echo "::add-matcher::${{ github.workspace }}/.github/gcc-problem-matcher.json"
+
+      - name: Cache SCons build
+        uses: actions/cache@v4
+        with:
+          path: .scons-cache
+          key: scons-macOS-macos-${{ hashFiles('src/godot-cpp/SConstruct', 'src/SConstruct', 'src/vertex_painter_core.cpp', 'src/vertex_painter_core.h') }}
+          restore-keys: |
+            scons-macOS-macos-
 
       - name: Install SCons
         run: |

@@ -22,26 +22,21 @@ A professional vertex color painting tool for Godot 4.2+ that supports manual br
 
 ## Installation
 
-### Quick Install (GDScript only)
+### Recommended: Pre-built Binaries
 
-1. Copy the `addons/nexus_vertex_painter` folder into your project's `addons/` directory
-2. Enable the addon in Project → Project Settings → Plugins
-3. The addon works immediately with the GDScript fallback
+1. Download `godot-nexus-vertex-painter-<version>.zip` from [Releases](https://github.com/undomick/godot-nexus-vertex-painter/releases)
+2. Extract into your project so the `addons/` folder merges with your project's `addons/`
+3. Enable the addon in **Project → Project Settings → Plugins**
 
-### With C++ for Better Performance
+The zip includes binaries for Windows, Linux, and macOS. The addon normally runs in **C++ mode**. If it falls back to GDScript, the pre-built binaries don't match your OS – either [build from source](docs/INSTALL.md#build-c-gdextension-from-source), or keep the GDScript fallback (you can delete the addon's `bin/` folder if you prefer).
 
-For large meshes, the C++ GDExtension significantly improves painting speed. See [docs/INSTALL.md](docs/INSTALL.md) for build instructions.
+### GDScript Only
 
-**Pre-built binaries**: Check [Releases](https://github.com/undomick/godot-nexus-vertex-painter/releases) for Windows, Linux, and macOS binaries.
+Copy the addon without `bin/` or delete `bin/` after install. Works immediately; for meshes with 50k+ vertices, C++ is faster.
 
-### Building from Source (C++ GDExtension)
+### Build from Source
 
-If you work on the source code and need to build the C++ extension:
-
-1. Run `.\scripts\install_dependencies.ps1` to clone godot-cpp and init submodules
-2. Run `pip install scons`, then `cd src` and `scons platform=windows target=editor` (or linux/macos)
-
-See [src/README.md](src/README.md) for detailed build instructions.
+If you develop the addon or need custom binaries: run `.\scripts\install_dependencies.ps1`, then `pip install scons` and `cd src && scons platform=windows target=editor` (or `linux`/`macos`). See [docs/INSTALL.md](docs/INSTALL.md) and [src/README.md](src/README.md) for details.
 
 ## Usage
 

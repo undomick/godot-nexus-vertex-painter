@@ -5,6 +5,10 @@ on:
     tags:
       - "v*"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-release:
     name: Build and Release
@@ -27,6 +31,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Add GCC problem matcher
+        run: echo "::add-matcher::${{ github.workspace }}/.github/gcc-problem-matcher.json"
+
+      - name: Cache SCons build
+        uses: actions/cache@v4
+        with:
+          path: .scons-cache
+          key: scons-${{ runner.os }}-${{ matrix.platform }}-${{ hashFiles('src/godot-cpp/SConstruct', 'src/SConstruct', 'src/vertex_painter_core.cpp', 'src/vertex_painter_core.h') }}
+          restore-keys: |
+            scons-${{ runner.os }}-${{ matrix.platform }}-
 
       - name: (Windows) Install mingw64
         if: matrix.platform == 'windows'

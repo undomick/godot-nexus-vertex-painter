@@ -1,28 +1,27 @@
 # Nexus Vertex Painter – Installation
 
-## Method 1: Addon Only (GDScript Fallback)
+## Recommended: Pre-built Binaries (All Platforms)
 
-1. Copy the `nexus_vertex_painter` folder into your project’s `addons/` directory.
-2. In Godot: **Project → Project Settings → Plugins**
-3. Enable **Nexus Vertex Painter**.
+The release zip includes GDExtension binaries for Windows, Linux, and macOS in one archive.
 
-The addon works immediately with the GDScript fallback. For meshes with many vertices (50k+), performance is better with the C++ extension.
-
-## Method 2a: Pre-built C++ Binaries (Recommended)
-
-We provide pre-compiled GDExtension binaries for Windows, Linux, and macOS in a single archive:
-
-1. Go to the [Releases](https://github.com/undomick/godot-nexus-vertex-painter/releases) section of this repository.
+1. Go to [Releases](https://github.com/undomick/godot-nexus-vertex-painter/releases).
 2. Download `godot-nexus-vertex-painter-<version>.zip`.
-3. Extract into your project – the `addons/` folder merges with your project's `addons/` folder.
+3. Extract into your project so the `addons/` folder merges with your project's `addons/`.
 4. Enable the addon in **Project → Project Settings → Plugins**.
 5. Restart Godot if it was already open.
 
-The archive includes `bin/windows/`, `bin/linux/`, and `bin/macos/`. Godot automatically loads the correct binary for your operating system. No compiler or build tools required.
+The addon normally starts in **C++ mode**. If it doesn't (you see it fall back to GDScript), the pre-built binaries are not compatible with your OS/architecture. You can either build from source (see below) or keep using the GDScript fallback – in that case you can optionally delete the `bin/` folder inside the addon to remove the unused binaries.
 
-## Method 2b: Build C++ GDExtension Yourself
+## GDScript Fallback Only
 
-If pre-built binaries are not available for your platform, you can build from source:
+1. Copy the `nexus_vertex_painter` folder into your project's `addons/` directory (without the `bin/` folder, or delete it after install).
+2. Enable the addon in **Project → Project Settings → Plugins**.
+
+Works immediately. Best for small meshes; for 50k+ vertices, the C++ extension is significantly faster.
+
+## Build C++ GDExtension from Source
+
+If the pre-built binaries don't work on your system, build them yourself:
 
 1. **Clone godot-cpp** (if not already present):
 
@@ -56,10 +55,4 @@ If pre-built binaries are not available for your platform, you can build from so
 - Python 3.x with SCons (`pip install scons`)
 - C++ compiler: MSVC (Windows), GCC/Clang (Linux), Xcode (macOS)
 
-### Platform Notes
-
-- **Windows**: Use `platform=windows`
-- **Linux**: Use `platform=linux`
-- **macOS**: Use `platform=macos` and optionally `arch=universal` for universal binary
-
-See `src/README.md` in the project root for more build details and troubleshooting.
+See `src/README.md` for detailed build instructions and troubleshooting.
