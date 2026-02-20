@@ -95,11 +95,19 @@ jobs:
 
       - name: Create release archives
         run: |
-          cd artifacts
-          for dir in */; do
-            zip -r "../${dir%/}.zip" "$dir"
+          # Map artifact names to bin/ subfolder names (.gdextension expects windows/, linux/, macos/)
+          for artifact_dir in artifacts/*/; do
+            dirname=$(basename "$artifact_dir")
+            case "$dirname" in
+              windows-editor-x86_64)  subdir="windows" ;;
+              linux-editor-x86_64)    subdir="linux" ;;
+              macos-editor-universal) subdir="macos" ;;
+              *) subdir="$dirname" ;;
+            esac
+            mkdir -p "release_bin/${subdir}"
+            cp -r "${artifact_dir}"* "release_bin/${subdir}/"
+            (cd release_bin && zip -r "../${dirname}.zip" "$subdir")
           done
-          cd ..
 
       - name: Create addons-only source zip
         run: |
@@ -121,6 +129,7 @@ jobs:
             echo "**GDExtension (recommended):**"
             echo "1. Download the archive for your platform (linux/windows/macos)."
             echo "2. Extract into your project's \`addons/nexus_vertex_painter/bin/\` folder."
+            echo "3. If the folder is named \`windows-editor-x86_64\` etc., rename it to \`windows\` / \`linux\` / \`macos\`."
             echo ""
             echo "**Addon only (GDScript fallback):**"
             echo "1. Download \`godot-nexus-vertex-painter-addons-\${{ github.ref_name }}.zip\`"

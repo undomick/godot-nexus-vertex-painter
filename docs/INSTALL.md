@@ -12,10 +12,14 @@ The addon works immediately with the GDScript fallback. For meshes with many ver
 
 We provide pre-compiled GDExtension binaries for Windows, Linux, and macOS:
 
-1. Go to the [Releases](../../releases) section of this repository.
+1. Go to the [Releases](https://github.com/undomick/godot-nexus-vertex-painter/releases) section of this repository.
 2. Download the archive for your platform (`linux-editor-x86_64.zip`, `windows-editor-x86_64.zip`, or `macos-editor-universal.zip`).
-3. Extract the contents into your project's `addons/nexus_vertex_painter/bin/` folder. The ZIP contains a platform subfolder (`windows/`, `linux/`, or `macos/`); ensure it ends up directly inside `bin/`.
-4. Restart Godot if it was already open.
+3. Extract the contents into your project's `addons/nexus_vertex_painter/bin/` folder.
+4. **Folder names:** The GDExtension expects subfolders named `windows/`, `linux/`, or `macos/`. If the ZIP uses different names (e.g. `windows-editor-x86_64`, `linux-editor-x86_64`, `macos-editor-universal`), rename the extracted folder accordingly before or after copying into `bin/`:
+   - `windows-editor-x86_64` → `windows`
+   - `linux-editor-x86_64` → `linux`
+   - `macos-editor-universal` → `macos`
+5. Restart Godot if it was already open.
 
 No compiler or build tools required.
 
