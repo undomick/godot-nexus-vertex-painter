@@ -93,27 +93,16 @@ jobs:
         with:
           path: artifacts
 
-      - name: Create release archives
+      - name: Create addon zip with all platform binaries
         run: |
-          # Map artifact names to bin/ subfolder names (.gdextension expects windows/, linux/, macos/)
-          for artifact_dir in artifacts/*/; do
-            dirname=$(basename "$artifact_dir")
-            case "$dirname" in
-              windows-editor-x86_64)  subdir="windows" ;;
-              linux-editor-x86_64)    subdir="linux" ;;
-              macos-editor-universal) subdir="macos" ;;
-              *) subdir="$dirname" ;;
-            esac
-            mkdir -p "release_bin/${subdir}"
-            cp -r "${artifact_dir}"* "release_bin/${subdir}/"
-            (cd release_bin && zip -r "../${dirname}.zip" "$subdir")
-          done
-
-      - name: Create addons-only source zip
-        run: |
-          mkdir -p addons
-          cp -r game/addons/nexus_vertex_painter addons/
-          zip -r "godot-nexus-vertex-painter-addons-${{ github.ref_name }}.zip" addons
+          # Single zip: addon with bin/windows/, bin/linux/, bin/macos/ – Godot picks the right one for the OS
+          mkdir -p addons/nexus_vertex_painter
+          cp -r game/addons/nexus_vertex_painter/* addons/nexus_vertex_painter/
+          mkdir -p addons/nexus_vertex_painter/bin/windows addons/nexus_vertex_painter/bin/linux addons/nexus_vertex_painter/bin/macos
+          cp -r artifacts/windows-editor-x86_64/* addons/nexus_vertex_painter/bin/windows/
+          cp -r artifacts/linux-editor-x86_64/* addons/nexus_vertex_painter/bin/linux/
+          cp -r artifacts/macos-editor-universal/* addons/nexus_vertex_painter/bin/macos/
+          zip -r "godot-nexus-vertex-painter-${{ github.ref_name }}.zip" addons
 
       - name: Extract changelog for release
         id: changelog
@@ -126,14 +115,11 @@ jobs:
             echo ""
             echo "### Installation"
             echo ""
-            echo "**GDExtension (recommended):**"
-            echo "1. Download the archive for your platform (linux/windows/macos)."
-            echo "2. Extract into your project's \`addons/nexus_vertex_painter/bin/\` folder."
-            echo "3. If the folder is named \`windows-editor-x86_64\` etc., rename it to \`windows\` / \`linux\` / \`macos\`."
-            echo ""
-            echo "**Addon only (GDScript fallback):**"
-            echo "1. Download \`godot-nexus-vertex-painter-addons-\${{ github.ref_name }}.zip\`"
+            echo "1. Download \`godot-nexus-vertex-painter-\${{ github.ref_name }}.zip\`"
             echo "2. Extract into your project – the \`addons/\` folder merges with your project's \`addons/\`."
+            echo "3. Enable the addon in Project → Project Settings → Plugins."
+            echo ""
+            echo "The zip includes binaries for Windows, Linux, and macOS. Godot automatically uses the one for your OS."
             echo "RELEASE_BODY"
           } >> $GITHUB_OUTPUT
 
