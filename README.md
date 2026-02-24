@@ -74,7 +74,7 @@ nexus_vertexpainter/
 
 ## Support & Community
 
-Join the [Discord server](https://discord.gg/HMxbzqWCgQ) to ask questions, suggest features, or show off your projects made with this addon.
+Join the [Discord server](https://discord.gg/VTSpAEHHhW) to ask questions, suggest features, or show off your projects made with this addon.
 
 ## License
 
