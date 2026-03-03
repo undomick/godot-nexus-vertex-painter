@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode unshaded, depth_draw_never, cull_back, blend_mix;
+render_mode unshaded, depth_draw_opaque, cull_back, blend_mix;
 
 uniform sampler2D depth_texture : hint_depth_texture, filter_linear_mipmap;
 
@@ -26,15 +26,68 @@ uniform float softness = 0.002;
 uniform float thickness_scale = 0.015;
 uniform float min_thickness = 0.002;
 
+// --- DISPLACEMENT (mirrors target mesh material for decal-on-surface) ---
+uniform bool use_displacement = false;
+uniform int displacement_mode = 0;  // 0=simple, 1=5-layer blend
+uniform sampler2D disp_tex : hint_default_black, filter_linear_mipmap, repeat_enable;
+uniform sampler2D mat1_displacement : hint_default_black, filter_linear_mipmap, repeat_enable;
+uniform sampler2D mat2_displacement : hint_default_black, filter_linear_mipmap, repeat_enable;
+uniform sampler2D mat3_displacement : hint_default_black, filter_linear_mipmap, repeat_enable;
+uniform sampler2D mat4_displacement : hint_default_black, filter_linear_mipmap, repeat_enable;
+uniform sampler2D mat5_displacement : hint_default_black, filter_linear_mipmap, repeat_enable;
+uniform float uv_scale = 1.0;
+uniform float blend_softness = 0.0;
+uniform float displacement_scale = 0.1;
+uniform float displacement_midpoint = 0.5;
+uniform sampler2D height_map : hint_default_black, filter_linear_mipmap, repeat_enable;
+uniform float height_map_blend_influence = 0.0;
+
 // Varyings
 varying vec3 world_pos;
 varying vec3 v_normal; 
 
 void vertex() {
-	// Physical Overlay
-	VERTEX += NORMAL * 0.005;
+	// Apply same displacement as target mesh so decal follows surface
+	if (use_displacement) {
+		vec2 uv = UV * uv_scale;
+		float height = 0.0;
+		if (displacement_mode == 0) {
+			height = texture(disp_tex, uv).r - displacement_midpoint;
+		} else {
+			vec4 vc = COLOR;
+			float r = vc.r, g = vc.g, b = vc.b, a = vc.a;
+			if (blend_softness > 0.001) {
+				float soft = blend_softness * 0.5;
+				r = smoothstep(soft, 1.0 - soft, r);
+				g = smoothstep(soft, 1.0 - soft, g);
+				b = smoothstep(soft, 1.0 - soft, b);
+				a = smoothstep(soft, 1.0 - soft, a);
+			}
+			float w1 = 1.0 - step(0.001, r + g + b + a);
+			float w2 = r, w3 = g, w4 = b, w5 = a;
+			if (abs(height_map_blend_influence) > 0.001) {
+				float h = texture(height_map, uv).r;
+				float hm = 1.0 + height_map_blend_influence * (0.5 - h);
+				w2 *= max(0.0, hm);
+				w3 *= max(0.0, hm);
+				w4 *= max(0.0, hm);
+				w5 *= max(0.0, hm);
+			}
+			float total = w1 + w2 + w3 + w4 + w5;
+			total = max(total, 0.001);
+			float inv_total = 1.0 / total;
+			float d1 = texture(mat1_displacement, uv).r;
+			float d2 = texture(mat2_displacement, uv).r;
+			float d3 = texture(mat3_displacement, uv).r;
+			float d4 = texture(mat4_displacement, uv).r;
+			float d5 = texture(mat5_displacement, uv).r;
+			height = (d1 * w1 + d2 * w2 + d3 * w3 + d4 * w4 + d5 * w5) * inv_total - displacement_midpoint;
+		}
+		VERTEX += NORMAL * height * displacement_scale;
+	}
+	// Offset so decal sits above surface (visible, avoids z-fighting)
+	VERTEX += NORMAL * 0.02;
 	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-	// Normal for Triplanar Blending
 	v_normal = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
 }
 
@@ -75,7 +128,7 @@ void fragment() {
 		
 		// 2. Relative Position (Centered at Brush)
 		vec3 rel_pos = world_pos - brush_pos;
-		float uv_scale = 1.0 / (brush_radius * 2.0);
+		float brush_uv_scale = 1.0 / (brush_radius * 2.0);
 		
 		// 3. Calculate Projections & Apply Rotation & Fix Mirroring
 		
@@ -87,7 +140,7 @@ void fragment() {
 		// Standard Flip for Y-Projection usually requires inverting X relative to Z for readable text
 		raw_uv_y.x = -raw_uv_y.x; 
 		
-		vec2 uv_y = raw_uv_y * uv_scale + 0.5;
+		vec2 uv_y = raw_uv_y * brush_uv_scale + 0.5;
 		uv_y.y = 1.0 - uv_y.y; // Standard Vertical Flip
 		uv_y = rotate_uv(uv_y, brush_angle);
 
@@ -97,7 +150,7 @@ void fragment() {
 		// FIX: If normal points Back (-Z), flip X to prevent mirroring
 		if (v_normal.z < 0.0) raw_uv_z.x = -raw_uv_z.x;
 		
-		vec2 uv_z = raw_uv_z * uv_scale + 0.5;
+		vec2 uv_z = raw_uv_z * brush_uv_scale + 0.5;
 		uv_z.y = 1.0 - uv_z.y; 
 		uv_z = rotate_uv(uv_z, brush_angle);
 		
@@ -109,7 +162,7 @@ void fragment() {
 		// Correction for side mapping direction
 		raw_uv_x.x = -raw_uv_x.x; 
 		
-		vec2 uv_x = raw_uv_x * uv_scale + 0.5;
+		vec2 uv_x = raw_uv_x * brush_uv_scale + 0.5;
 		uv_x.y = 1.0 - uv_x.y;
 		uv_x = rotate_uv(uv_x, brush_angle);
 		

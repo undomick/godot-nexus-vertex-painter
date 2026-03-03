@@ -5,6 +5,32 @@ All notable changes to Nexus Vertex Painter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-03-03
+
+### Added
+
+- Additional shaders for vertex color workflows
+- **Preview Smart Mask**: Visual overlay to preview which areas the slope/curvature mask will affect before painting (white = paintable, black = masked out)
+
+### Fixed
+
+- Meshes could disappear under certain circumstances while painting; runtime mesh rebuild is now more robust
+- Division-by-zero guards (brush_size, falloff, radius) in C++ and GDScript; null-checks for `get_world_3d()`, Bake/Revert `load()`, `surface_get_arrays`, camera, `create_trimesh_shape`; `get_neighbors` safe access when cache build fails; `_runtime_mesh` null-guard; `colors.resize(vertex_count)` validation in paint path; procedural slope/bottom_up edge cases; image dimension checks in texture sampling
+- **Bake/Revert**: Mesh type validation for loaded resources; undo history cleared on Bake to prevent stale references
+- **Data integrity**: `_ensure_packed_color_array` uses slice when shrinking to avoid mutating original; Preview overlays cleared after Bake
+- **Performance**: Single raycast instead of per-mesh; early exit when no channels active (Fill/Clear); central `_get_mask_settings()` helper; C++ explicit `PackedInt32Array` for neighbor map
+- **UX**: Texture drop zone now warns when load fails or resource is not a Texture2D
+
+### Known Issues
+
+- Surfaces that previously did not support vertex colors should now receive them; however, during painting the debug output may be flooded with the following error:
+  - `ERROR: servers/rendering/rendering_server.cpp:784 - Condition "p_arrays[ai].get_type() != Variant::PACKED_BYTE_ARRAY" is true. Returning: ERR_INVALID_PARAMETER`
+  - `ERROR: Invalid array format for surface.`
+  - `ERROR: scene/resources/mesh.cpp:1825 - Condition "err != OK" is true.`
+  - This appears to be related to Godot's handling of compressed mesh attributes (e.g. `ARRAY_FLAG_COMPRESSED`) when using `surface_update_attribute_region` or similar fast-path updates.
+
+---
+
 ## [2.0.0] - 2026-02-19
 
 ### Added
@@ -39,3 +65,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Brush texture support, triplanar sampling
 - Slope and curvature masks
 - Undo/Redo support
+

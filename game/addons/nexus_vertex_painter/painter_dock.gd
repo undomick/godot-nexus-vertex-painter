@@ -21,6 +21,9 @@ signal revert_requested()
 @onready var strength_edit: LineEdit = %BrushSizeLineEdit3
 @onready var texture_drop: PanelContainer = %TextureDropZone
 
+# Smart Masking UI - Preview
+@onready var mask_preview_check: CheckBox = %MaskPreviewCheck
+
 # Smart Masking UI - Slope
 @onready var mask_slope_check: CheckBox = %MaskSlopeCheck
 @onready var mask_slope_label: Label = %MaskSlopeLabel
@@ -126,6 +129,10 @@ func _ready() -> void:
 	if not texture_drop.texture_changed.is_connected(_on_texture_changed):
 		texture_drop.texture_changed.connect(_on_texture_changed)
 		
+	# 6b. Setup Mask Preview
+	if mask_preview_check and not mask_preview_check.toggled.is_connected(_on_settings_changed_arg):
+		mask_preview_check.toggled.connect(_on_settings_changed_arg)
+	
 	# 7. Setup Mask Toggles (Slope)
 	if not mask_slope_check.toggled.is_connected(_on_mask_check_toggled):
 		mask_slope_check.toggled.connect(_on_mask_check_toggled)
@@ -201,6 +208,7 @@ func _setup_tooltips() -> void:
 	if size_slider: size_slider.tooltip_text = "Brush size. Ctrl+RMB drag: vertical"
 	if falloff_slider: falloff_slider.tooltip_text = "Brush falloff. Shift+RMB drag: vertical"
 	if strength_slider: strength_slider.tooltip_text = "Brush strength. Ctrl+RMB drag: horizontal"
+	if mask_preview_check: mask_preview_check.tooltip_text = "Show slope/curvature mask as grayscale overlay (white = paintable)"
 	if mask_slope_check: mask_slope_check.tooltip_text = "Limit painting to surfaces within slope angle"
 	if mask_curv_check: mask_curv_check.tooltip_text = "Limit painting by curvature (flat vs curved)"
 
@@ -225,7 +233,10 @@ func get_settings() -> Dictionary:
 		# Curvature Mask
 		"mask_curv_enabled": mask_curv_check.button_pressed,
 		"mask_curv_sensitivity": mask_curv_slider.value,
-		"mask_curv_invert": mask_curv_invert.button_pressed
+		"mask_curv_invert": mask_curv_invert.button_pressed,
+		
+		# Preview Smart Mask
+		"preview_smart_mask": mask_preview_check.button_pressed if mask_preview_check else false
 	}
 
 # --- API FOR MOUSE SHORTCUTS ---

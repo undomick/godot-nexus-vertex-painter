@@ -96,6 +96,8 @@ func _drop_data(_at_position, data):
 	var tex = load(file_path)
 	if tex is Texture2D:
 		set_texture(tex)
+	else:
+		push_warning("Vertex Painter: Failed to load texture from '%s' (not a valid Texture2D)." % file_path)
 
 func set_texture(tex: Texture2D):
 	current_texture = tex

@@ -1,0 +1,12 @@
+[gd_resource type="ShaderMaterial" format=3 uid="uid://dv3ttd1irvxoa"]
+
+[ext_resource type="Shader" uid="uid://g5xgufo3u203" path="res://addons/nexus_vertex_painter/shaders/vertex_color_material_blend_displacement.gdshader" id="1_kqv7i"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_kqv7i")
+shader_parameter/uv_scale = 1.0
+shader_parameter/blend_softness = 0.0
+shader_parameter/normal_scale = 1.0
+shader_parameter/displacement_scale = 0.1370000065075
+shader_parameter/displacement_midpoint = 0.5

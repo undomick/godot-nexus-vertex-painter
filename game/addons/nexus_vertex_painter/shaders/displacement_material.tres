@@ -1,0 +1,19 @@
+[gd_resource type="ShaderMaterial" format=3 uid="uid://yb0u6h3qyhtp"]
+
+[ext_resource type="Shader" uid="uid://ci0e3h46kg033" path="res://addons/nexus_vertex_painter/shaders/displacement_material.gdshader" id="1_2olfc"]
+[ext_resource type="Texture2D" uid="uid://cv8emdyqqg4v4" path="res://textures/Wet Mud/Wet Mud_Albedo.png" id="2_s1cgr"]
+[ext_resource type="Texture2D" uid="uid://dyupx8puyx0vs" path="res://textures/Wet Mud/Wet Mud_Displacement.exr" id="3_mxswr"]
+[ext_resource type="Texture2D" uid="uid://ctktvoedi0yqh" path="res://textures/Wet Mud/Wet Mud_Normal.png" id="4_v5620"]
+[ext_resource type="Texture2D" uid="uid://bri0wr2wxib11" path="res://textures/Wet Mud/Wet Mud_ORM.png" id="5_uex2x"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_2olfc")
+shader_parameter/albedo_texture = ExtResource("2_s1cgr")
+shader_parameter/orm_texture = ExtResource("5_uex2x")
+shader_parameter/normal_texture = ExtResource("4_v5620")
+shader_parameter/displacement_texture = ExtResource("3_mxswr")
+shader_parameter/uv_scale = 1.0
+shader_parameter/displacement_scale = 0.1250000059375
+shader_parameter/displacement_midpoint = 0.50000002375
+shader_parameter/normal_scale = 1.0

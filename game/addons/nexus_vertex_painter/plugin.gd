@@ -4,6 +4,7 @@ extends EditorPlugin
 const DOCK_SCENE = preload("res://addons/nexus_vertex_painter/painter_dock.tscn")
 const DEFAULT_COLLISION_LAYER := 30
 const LARGE_MESH_VERTEX_WARN := 500000
+const VERTEX_COLOR_DATA_SCRIPT := "res://addons/nexus_vertex_painter/vertex_color_data.gd"
 
 # --- UI & REFERENCES ---
 var dock_instance: Control
@@ -35,6 +36,10 @@ var _paint_core: RefCounted = null
 
 # Edge-case: avoid spamming large mesh warning
 var _warned_large_meshes: Dictionary = {}
+
+# Preview Smart Mask: stored state per mesh (mesh_instance -> { overlay_instance })
+# We use an overlay child MeshInstance3D instead of replacing the mesh so Inspector keeps original.
+var _preview_stored_state: Dictionary = {}
 
 # Baking
 var file_dialog: EditorFileDialog
@@ -139,6 +144,7 @@ func _exit_tree():
 		remove_control_from_container(CONTAINER_SPATIAL_EDITOR_MENU, btn_mode)
 		btn_mode.free()
 	
+	_clear_preview_overlays(true)
 	_clear_all_locks()
 	_clear_all_colliders()
 
@@ -147,6 +153,7 @@ func _on_mode_toggled(pressed: bool):
 	dock_instance.set_ui_active(pressed)
 	
 	if not pressed:
+		_clear_preview_overlays(true)
 		_clear_all_locks()
 		_clear_all_colliders()
 		is_painting = false
@@ -174,6 +181,7 @@ func _on_selection_changed():
 	if paint_mode_active:
 		_refresh_selection_and_colliders()
 		_update_shader_debug_view()
+		_update_smart_mask_preview()
 		dock_instance.set_selection_empty(selected_meshes.is_empty())
 
 # --- SELECTION & LOCKING ---
@@ -235,11 +243,18 @@ func _has_internal_collider(mesh: MeshInstance3D) -> bool:
 
 func _create_collider_for(mesh_instance: MeshInstance3D):
 	if not mesh_instance.mesh: return
-	
+	if mesh_instance.mesh.get_surface_count() == 0:
+		return  # Empty mesh - create_trimesh_shape would produce invalid collider
+
 	# 1. Physics Collider
 	var sb = StaticBody3D.new()
 	var col = CollisionShape3D.new()
-	col.shape = mesh_instance.mesh.create_trimesh_shape()
+	var shape = mesh_instance.mesh.create_trimesh_shape()
+	if not shape:
+		col.free()
+		sb.free()
+		return
+	col.shape = shape
 	sb.add_child(col)
 	sb.collision_layer = _get_paint_collision_mask()
 	sb.collision_mask = 0 
@@ -248,18 +263,52 @@ func _create_collider_for(mesh_instance: MeshInstance3D):
 	mesh_instance.add_child(sb)
 	temp_colliders.append(sb)
 	
-	# 2. Phantom Mesh (Visuals)
+	# 2. Phantom Mesh (Decal projected onto mesh - follows surface contours including displacement)
 	var phantom = MeshInstance3D.new()
 	phantom.mesh = mesh_instance.mesh
 	phantom.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	phantom.material_override = shared_brush_material
-	
 	mesh_instance.add_child(phantom)
 	temp_colliders.append(phantom)
+
+func _copy_displacement_params_from_mesh(mesh_instance: MeshInstance3D, target: ShaderMaterial):
+	var src = mesh_instance.get_active_material(0) as ShaderMaterial
+	if not src or not src.shader:
+		target.set_shader_parameter("use_displacement", false)
+		return
+	var path = src.shader.resource_path
+	if path == null:
+		target.set_shader_parameter("use_displacement", false)
+		return
+	if path.ends_with("displacement_material.gdshader"):
+		target.set_shader_parameter("use_displacement", true)
+		target.set_shader_parameter("displacement_mode", 0)
+		target.set_shader_parameter("disp_tex", src.get_shader_parameter("displacement_texture"))
+		target.set_shader_parameter("uv_scale", src.get_shader_parameter("uv_scale"))
+		target.set_shader_parameter("displacement_scale", src.get_shader_parameter("displacement_scale"))
+		target.set_shader_parameter("displacement_midpoint", src.get_shader_parameter("displacement_midpoint"))
+	elif path.ends_with("vertex_color_material_blend_displacement.gdshader") or path.ends_with("vertex_color_material_blend_displacement_height.gdshader"):
+		target.set_shader_parameter("use_displacement", true)
+		target.set_shader_parameter("displacement_mode", 1)
+		for i in range(1, 6):
+			target.set_shader_parameter("mat%d_displacement" % i, src.get_shader_parameter("mat%d_displacement" % i))
+		target.set_shader_parameter("uv_scale", src.get_shader_parameter("uv_scale"))
+		target.set_shader_parameter("blend_softness", src.get_shader_parameter("blend_softness"))
+		target.set_shader_parameter("displacement_scale", src.get_shader_parameter("displacement_scale"))
+		target.set_shader_parameter("displacement_midpoint", src.get_shader_parameter("displacement_midpoint"))
+		if path.ends_with("vertex_color_material_blend_displacement_height.gdshader"):
+			target.set_shader_parameter("height_map", src.get_shader_parameter("height_map"))
+			target.set_shader_parameter("height_map_blend_influence", src.get_shader_parameter("height_map_blend_influence"))
+		else:
+			target.set_shader_parameter("height_map_blend_influence", 0.0)
+	else:
+		target.set_shader_parameter("use_displacement", false)
 
 func _clear_all_colliders():
 	for node in temp_colliders:
 		if is_instance_valid(node):
+			if node is MeshInstance3D:
+				node.material_override = null
 			node.queue_free()
 	temp_colliders.clear()
 
@@ -271,10 +320,21 @@ func _get_or_create_data_node(mesh_instance: MeshInstance3D) -> VertexColorData:
 			if path and path != "":
 				mesh_instance.set_meta("_vertex_paint_original_path", path)
 
+	# Step 1: Find valid VertexColorData by type
 	for child in mesh_instance.get_children():
 		if child is VertexColorData:
 			return child
-	
+
+	# Step 2: Remove orphaned nodes (name VertexColorData but script failed)
+	for child in mesh_instance.get_children():
+		if child.name == "VertexColorData":
+			var script_ref = child.get_script()
+			var valid = script_ref != null and script_ref.resource_path == VERTEX_COLOR_DATA_SCRIPT
+			if not valid:
+				child.queue_free()
+				break  # Only one orphan expected
+
+	# Step 3: Create new node
 	var node = VertexColorData.new()
 	node.name = "VertexColorData"
 	mesh_instance.add_child(node)
@@ -291,7 +351,8 @@ func _get_or_create_data_node(mesh_instance: MeshInstance3D) -> VertexColorData:
 
 func _forward_3d_gui_input(camera: Camera3D, event: InputEvent) -> int:
 	if not paint_mode_active: return AFTER_GUI_INPUT_PASS
-	
+	if not camera: return AFTER_GUI_INPUT_PASS
+
 	# --- 1. KEYBOARD SHORTCUTS ---
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.ctrl_pressed or event.alt_pressed or event.meta_pressed:
@@ -380,91 +441,98 @@ func _forward_3d_gui_input(camera: Camera3D, event: InputEvent) -> int:
 
 	if not (event is InputEventMouse): return AFTER_GUI_INPUT_PASS
 
-	# Raycast
+	# Raycast once (same ray for all selected meshes in same world)
 	var mouse_pos = event.position
 	var ray_origin = camera.project_ray_origin(mouse_pos)
 	var ray_normal = camera.project_ray_normal(mouse_pos)
 	var ray_length = 4000.0
-	
-	for selected_mesh in selected_meshes:
-		var space_state = selected_mesh.get_world_3d().direct_space_state
-		var query = PhysicsRayQueryParameters3D.create(ray_origin, ray_origin + ray_normal * ray_length)
-		query.collide_with_bodies = true
-		query.collision_mask = _get_paint_collision_mask()
-	
-		var result = space_state.intersect_ray(query)
-		var hit_pos = Vector3.ZERO
-		var hit_mesh_instance: MeshInstance3D = null
-		var hit_something = false
-		
-		if result and result.collider:
-			hit_something = true
-			var collider = result.collider
-			
-			if collider in temp_colliders:
-				hit_mesh_instance = collider.get_parent()
-			else:
-				for mesh in selected_meshes:
-					if collider == mesh or collider == mesh.get_parent():
-						hit_mesh_instance = mesh
-						break
 
-			if hit_mesh_instance:
-				hit_pos = result.position
+	var w3d = null
+	for m in selected_meshes:
+		w3d = m.get_world_3d()
+		if w3d:
+			break
+	if not w3d:
+		return AFTER_GUI_INPUT_PASS
 
-		# Update Brush Visuals (Global)
-		if hit_something and not is_adjusting_brush:
-			var settings = dock_instance.get_settings()
-			
-			if hit_mesh_instance:
-				shared_brush_material.set_shader_parameter("brush_pos", hit_pos)
-				shared_brush_material.set_shader_parameter("brush_radius", settings.size)
-				shared_brush_material.set_shader_parameter("falloff_range", settings.falloff)
-				shared_brush_material.set_shader_parameter("channel_mask", settings.channels)
-				shared_brush_material.set_shader_parameter("brush_strength", settings.strength)
-				shared_brush_material.set_shader_parameter("brush_angle", settings.brush_angle)
-				
-				if result.has("normal"):
-					shared_brush_material.set_shader_parameter("brush_normal", result.normal)
-				
-				if settings.brush_texture:
-					shared_brush_material.set_shader_parameter("use_texture", true)
-					shared_brush_material.set_shader_parameter("brush_texture", settings.brush_texture)
-				else:
-					shared_brush_material.set_shader_parameter("use_texture", false)
+	var space_state = w3d.direct_space_state
+	var query = PhysicsRayQueryParameters3D.create(ray_origin, ray_origin + ray_normal * ray_length)
+	query.collide_with_bodies = true
+	query.collision_mask = _get_paint_collision_mask()
+	var result = space_state.intersect_ray(query)
+
+	var hit_pos = Vector3.ZERO
+	var hit_mesh_instance: MeshInstance3D = null
+	var hit_something = false
+
+	if result and result.collider:
+		hit_something = true
+		var collider = result.collider
+		if collider in temp_colliders:
+			hit_mesh_instance = collider.get_parent()
+		else:
+			for mesh in selected_meshes:
+				if collider == mesh or collider == mesh.get_parent():
+					hit_mesh_instance = mesh
+					break
+		if hit_mesh_instance:
+			hit_pos = result.position
+
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+			if hit_something and not hit_mesh_instance:
+				VertexPainterLog.debug("Raycast hit collider but not a selected mesh (collider: %s)" % collider.get_class())
+			elif hit_mesh_instance:
+				VertexPainterLog.debug("Raycast OK: hit_pos=%s mesh=%s" % [hit_pos, hit_mesh_instance.name])
 			else:
-				shared_brush_material.set_shader_parameter("brush_radius", 0.0)
-		elif not is_adjusting_brush:
+				VertexPainterLog.debug("Raycast: no hit")
+
+	# Update Brush Visuals
+	if hit_something and not is_adjusting_brush:
+		var settings = dock_instance.get_settings()
+		if hit_mesh_instance:
+			shared_brush_material.set_shader_parameter("brush_pos", hit_pos)
+			shared_brush_material.set_shader_parameter("brush_radius", settings.size)
+			shared_brush_material.set_shader_parameter("falloff_range", settings.falloff)
+			shared_brush_material.set_shader_parameter("channel_mask", settings.channels)
+			shared_brush_material.set_shader_parameter("brush_strength", settings.strength)
+			shared_brush_material.set_shader_parameter("brush_angle", settings.brush_angle)
+			if result.has("normal"):
+				shared_brush_material.set_shader_parameter("brush_normal", result.normal)
+			if settings.brush_texture:
+				shared_brush_material.set_shader_parameter("use_texture", true)
+				shared_brush_material.set_shader_parameter("brush_texture", settings.brush_texture)
+			else:
+				shared_brush_material.set_shader_parameter("use_texture", false)
+			_copy_displacement_params_from_mesh(hit_mesh_instance, shared_brush_material)
+		else:
 			shared_brush_material.set_shader_parameter("brush_radius", 0.0)
+	elif not is_adjusting_brush:
+		shared_brush_material.set_shader_parameter("brush_radius", 0.0)
 
-		# Painting Action
-		if hit_mesh_instance and not is_adjusting_brush:
-			var settings = dock_instance.get_settings()
-			
-			if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-				if event.pressed:
-					is_painting = true
-					_start_undo_cycle() # Prepare for undo
-					paint_mesh(selected_meshes, hit_pos, settings)
-					return AFTER_GUI_INPUT_STOP
-				else:
-					is_painting = false
-					_commit_undo_snapshot() # Commit collected snapshots
-					return AFTER_GUI_INPUT_STOP
-			
-			elif event is InputEventMouseMotion and is_painting:
+	# Painting Action
+	if hit_mesh_instance and not is_adjusting_brush:
+		var settings = dock_instance.get_settings()
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+			if event.pressed:
+				is_painting = true
+				_start_undo_cycle()
 				paint_mesh(selected_meshes, hit_pos, settings)
 				return AFTER_GUI_INPUT_STOP
-				
-		else:
-			if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+			else:
 				is_painting = false
+				_commit_undo_snapshot()
 				return AFTER_GUI_INPUT_STOP
-			
-			if is_painting and event is InputEventMouseMotion:
-				return AFTER_GUI_INPUT_STOP
+		elif event is InputEventMouseMotion and is_painting:
+			paint_mesh(selected_meshes, hit_pos, settings)
+			return AFTER_GUI_INPUT_STOP
+	else:
+		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+			is_painting = false
+			_commit_undo_snapshot()
+			return AFTER_GUI_INPUT_STOP
+		if is_painting and event is InputEventMouseMotion:
+			return AFTER_GUI_INPUT_STOP
 
-		return AFTER_GUI_INPUT_PASS
 	return AFTER_GUI_INPUT_PASS
 
 # --- UNDO / REDO IMPLEMENTATION ---
@@ -502,6 +570,7 @@ func _on_texture_changed(tex):
 
 func _on_settings_changed():
 	_update_shader_debug_view()
+	_update_smart_mask_preview()
 	# In case texture was changed in settings without drop event
 	_update_brush_image_cache()
 
@@ -545,6 +614,8 @@ func paint_mesh(mesh_instances: Array[MeshInstance3D], global_hit_pos: Vector3, 
 		# Ensure Cache is ready
 		if data_node._cache_positions.is_empty():
 			data_node._prep_cache(mesh_instance.mesh)
+			if data_node._cache_positions.is_empty():
+				VertexPainterLog.debug("Cache still empty after _prep_cache for mesh: %s" % mesh_instance.mesh.resource_name)
 		
 		# Large mesh warning (once per mesh)
 		var vert_count := 0
@@ -565,20 +636,14 @@ func paint_mesh(mesh_instances: Array[MeshInstance3D], global_hit_pos: Vector3, 
 		# --- IMAGE RESOURCE (FIX POINT 3) ---
 		# Use the cached image directly
 		var brush_image = _cached_brush_image
-		
-		# Slope Mask
-		var use_slope_mask = settings.get("mask_slope_enabled", false)
-		var slope_angle_cos = 0.0
-		var slope_invert = settings.get("mask_slope_invert", false)
-		if use_slope_mask:
-			var angle_deg = settings.get("mask_slope_angle", 45.0)
-			slope_angle_cos = cos(deg_to_rad(angle_deg))
-			
-		# Curvature Mask
-		var use_curv_mask = settings.get("mask_curv_enabled", false)
-		var curv_sensitivity = settings.get("mask_curv_sensitivity", 0.5)
-		var curv_invert = settings.get("mask_curv_invert", false)
-		
+		var mask_settings = _get_mask_settings(settings)
+		var use_slope_mask = mask_settings.use_slope_mask
+		var slope_angle_cos = mask_settings.slope_angle_cos
+		var slope_invert = mask_settings.slope_invert
+		var use_curv_mask = mask_settings.use_curv_mask
+		var curv_sensitivity = mask_settings.curv_sensitivity
+		var curv_invert = mask_settings.curv_invert
+
 		var world_basis = mesh_instance.global_transform.basis
 		
 		# --- ITERATE SURFACES (via Cache) ---
@@ -596,6 +661,8 @@ func paint_mesh(mesh_instances: Array[MeshInstance3D], global_hit_pos: Vector3, 
 				colors = PackedColorArray()
 				colors.resize(vertex_count)
 				colors.fill(Color.BLACK)
+			if colors.size() != vertex_count:
+				colors.resize(vertex_count)
 			
 			# --- C++ path (fast) ---
 			if _use_cpp and _paint_core:
@@ -802,10 +869,16 @@ func _apply_procedural_to_mesh(mesh_instance: MeshInstance3D, type: String, sett
 					var v = mdt.get_vertex(i)
 					if v.y < min_y: min_y = v.y
 					if v.y > max_y: max_y = v.y
-		if is_equal_approx(min_y, max_y): max_y += 1.0
+		if is_equal_approx(min_y, max_y):
+			max_y += 1.0
+		elif max_y < min_y:
+			# No vertices were processed (all create_from_surface failed)
+			max_y = min_y + 1.0
 
 	var sharpness = settings.falloff
-	
+	if is_equal_approx(sharpness, 1.0):
+		sharpness = 0.99  # Avoid division by zero in slope weight
+
 	# Iterate ALL surfaces
 	for surf_idx in range(mesh.get_surface_count()):
 		var mdt = MeshDataTool.new()
@@ -920,6 +993,8 @@ func _on_clear_requested(channels: Vector4):
 	ur.commit_action()
 
 func _apply_global_color(mesh_instance: MeshInstance3D, channels: Vector4, value: float, is_fill: bool):
+	if channels.x == 0 and channels.y == 0 and channels.z == 0 and channels.w == 0:
+		return  # No channels active, skip unnecessary work
 	if not mesh_instance.mesh: return
 	if not (mesh_instance.mesh is ArrayMesh):
 		VertexPainterLog.warn("Fill/Clear: Mesh '" + mesh_instance.mesh.resource_name + "' is not an ArrayMesh. Only ArrayMesh is supported.")
@@ -978,6 +1053,120 @@ func _update_shader_debug_view():
 		if mat:
 			mat.set_shader_parameter("active_layer_view", 0)
 
+func _update_smart_mask_preview():
+	var settings = dock_instance.get_settings()
+	var preview_active = settings.get("preview_smart_mask", false)
+	if not preview_active:
+		_clear_preview_overlays(true)
+		return
+	if selected_meshes.is_empty():
+		return
+	var mask_settings = _get_mask_settings(settings)
+	_clear_preview_overlays(false)
+	var preview_shader = load("res://addons/nexus_vertex_painter/shaders/preview_mask.gdshader") as Shader
+	if not preview_shader:
+		VertexPainterLog.warn("Preview Smart Mask: Could not load preview_mask.gdshader")
+		return
+	for mesh_instance in selected_meshes:
+		if not mesh_instance.mesh or not (mesh_instance.mesh is ArrayMesh):
+			continue
+		_apply_preview_to_mesh(mesh_instance, preview_shader, mask_settings.use_slope_mask, mask_settings.slope_angle_cos, mask_settings.slope_invert, mask_settings.use_curv_mask, mask_settings.curv_sensitivity, mask_settings.curv_invert)
+
+func _clear_preview_overlays(restore_painted: bool = false):
+	var to_remove: Array = []
+	for mesh_instance in _preview_stored_state:
+		if not is_instance_valid(mesh_instance):
+			to_remove.append(mesh_instance)
+			continue
+		var stored = _preview_stored_state[mesh_instance]
+		var overlay = stored.get("overlay_instance") if stored is Dictionary else null
+		if overlay and is_instance_valid(overlay):
+			mesh_instance.remove_child(overlay)
+			overlay.queue_free()
+		if restore_painted:
+			var data_node = _get_or_create_data_node(mesh_instance)
+			if data_node and data_node.has_method("_apply_colors"):
+				data_node.call_deferred("_apply_colors")
+		to_remove.append(mesh_instance)
+	for key in to_remove:
+		_preview_stored_state.erase(key)
+
+func _apply_preview_to_mesh(mesh_instance: MeshInstance3D, preview_shader: Shader, use_slope_mask: bool, slope_angle_cos: float, slope_invert: bool, use_curv_mask: bool, curv_sensitivity: float, curv_invert: bool) -> void:
+	var src_mesh = mesh_instance.mesh
+	if not src_mesh:
+		return
+	var world_basis = mesh_instance.global_transform.basis
+	var preview_mat = ShaderMaterial.new()
+	preview_mat.shader = preview_shader
+	var temp_mesh = ArrayMesh.new()
+	temp_mesh.resource_name = "PreviewMaskTemp"
+	for surf_idx in range(src_mesh.get_surface_count()):
+		var mdt = MeshDataTool.new()
+		if mdt.create_from_surface(src_mesh, surf_idx) != OK:
+			continue
+		var vertex_count = mdt.get_vertex_count()
+		var surf_neighbors: Dictionary = {}
+		if use_curv_mask:
+			for v in range(vertex_count):
+				var edges = mdt.get_vertex_edges(v)
+				var n_list: Array = []
+				for e in edges:
+					var v1 = mdt.get_edge_vertex(e, 0)
+					var v2 = mdt.get_edge_vertex(e, 1)
+					n_list.append(v2 if v1 == v else v1)
+				surf_neighbors[v] = n_list
+		for i in range(vertex_count):
+			var slope_pass = true
+			if use_slope_mask:
+				var normal = mdt.get_vertex_normal(i)
+				var world_normal = (world_basis * normal).normalized()
+				var dot = world_normal.dot(Vector3.UP)
+				if slope_invert:
+					slope_pass = dot <= slope_angle_cos
+				else:
+					slope_pass = dot >= slope_angle_cos
+			var curv_pass = true
+			if use_curv_mask and surf_neighbors.has(i):
+				var neighbors = surf_neighbors[i]
+				if not neighbors.is_empty():
+					var avg_normal = Vector3.ZERO
+					for n_idx in neighbors:
+						avg_normal += mdt.get_vertex_normal(n_idx)
+					avg_normal = (avg_normal / neighbors.size()).normalized()
+					var my_normal = mdt.get_vertex_normal(i)
+					var flatness = my_normal.dot(avg_normal)
+					var threshold = 1.0 - (curv_sensitivity * 0.2)
+					if curv_invert:
+						curv_pass = flatness >= threshold
+					else:
+						curv_pass = flatness <= threshold
+			var mask_val = 1.0 if (slope_pass and curv_pass) else 0.0
+			mdt.set_vertex_color(i, Color(mask_val, mask_val, mask_val, 1.0))
+		mdt.commit_to_surface(temp_mesh)
+	for surf_idx in range(temp_mesh.get_surface_count()):
+		temp_mesh.surface_set_material(surf_idx, preview_mat)
+	# Use overlay child instead of replacing mesh - keeps original mesh visible in Inspector
+	var overlay = MeshInstance3D.new()
+	overlay.name = "VertexPaint_PreviewOverlay"
+	overlay.mesh = temp_mesh
+	mesh_instance.add_child(overlay)
+	_preview_stored_state[mesh_instance] = { "overlay_instance": overlay }
+
+func _get_mask_settings(settings: Dictionary) -> Dictionary:
+	var use_slope = settings.get("mask_slope_enabled", false)
+	var slope_cos = 0.0
+	if use_slope:
+		var angle_deg = settings.get("mask_slope_angle", 45.0)
+		slope_cos = cos(deg_to_rad(angle_deg))
+	return {
+		"use_slope_mask": use_slope,
+		"slope_angle_cos": slope_cos,
+		"slope_invert": settings.get("mask_slope_invert", false),
+		"use_curv_mask": settings.get("mask_curv_enabled", false),
+		"curv_sensitivity": settings.get("mask_curv_sensitivity", 0.5),
+		"curv_invert": settings.get("mask_curv_invert", false)
+	}
+
 func _get_paint_collision_mask() -> int:
 	# Retrieve setting (default to 30 if missing)
 	var layer_idx = DEFAULT_COLLISION_LAYER
@@ -995,6 +1184,8 @@ func _get_paint_collision_mask() -> int:
 # --- TEXTURE SAMPLING HELPER ---
 
 func _get_triplanar_sample(brush_pos: Vector3, vert_pos: Vector3, vert_normal: Vector3, radius: float, image: Image) -> float:
+	if radius <= 0.0:
+		return 0.0
 	# 1. Calculate Weights
 	var blending = vert_normal.abs()
 	blending = Vector3(pow(blending.x, 4.0), pow(blending.y, 4.0), pow(blending.z, 4.0))
@@ -1055,10 +1246,12 @@ func _rotate_uv_cpu(uv: Vector2, angle: float) -> Vector2:
 	return rotated + pivot
 
 func _sample_image_at_uv(image: Image, uv: Vector2) -> float:
+	if image.get_width() <= 0 or image.get_height() <= 0:
+		return 0.0
 	# Bounds check (Clamp to 0-1)
 	if uv.x < 0.0 or uv.x > 1.0 or uv.y < 0.0 or uv.y > 1.0:
 		return 0.0
-	
+
 	# Map UV to Pixel Coordinates
 	var x = int(uv.x * (image.get_width() - 1))
 	var y = int(uv.y * (image.get_height() - 1))
@@ -1111,17 +1304,27 @@ func _on_bake_file_selected(path: String):
 	
 	# Load it back to ensure Godot recognizes it as a file resource
 	var loaded_mesh = load(path)
-	
+	if not loaded_mesh:
+		VertexPainterLog.error("Failed to load baked mesh from " + path)
+		return
+	if not loaded_mesh is Mesh:
+		VertexPainterLog.error("Loaded resource is not a Mesh: " + path)
+		return
+
 	# Assign to instance
 	mesh_instance.mesh = loaded_mesh
 	
 	# Cleanup: Remove the VertexColorData node as it is no longer needed
 	# The mesh is now baked and permanent.
+	undo_snapshots.erase(data_node)
+	# Clear undo history to prevent stale references to freed data_node in prior undo actions
+	get_undo_redo().clear_history(false)
 	data_node.queue_free()
-	
+
 	VertexPainterLog.debug("Baked mesh to " + path)
 	
-	# Refresh UI state
+	# Refresh UI state and clear preview overlays (baked mesh replaced original)
+	_clear_preview_overlays(false)
 	_refresh_selection_and_colliders()
 
 # --- REVERT LOGIC ---
@@ -1137,23 +1340,27 @@ func _do_revert():
 	var reverted_count = 0
 	
 	for mesh_instance in selected_meshes:
+		if not is_instance_valid(mesh_instance):
+			continue
 		# 1. Try to find the original path in metadata
 		if mesh_instance.has_meta("_vertex_paint_original_path"):
 			var original_path = mesh_instance.get_meta("_vertex_paint_original_path")
 			
 			if ResourceLoader.exists(original_path):
 				var original_mesh = load(original_path)
-				if original_mesh:
+				if original_mesh and original_mesh is Mesh:
 					mesh_instance.mesh = original_mesh
 					reverted_count += 1
-				else:
+				elif not original_mesh:
 					VertexPainterLog.error("Could not load original mesh from " + str(original_path))
+				else:
+					VertexPainterLog.error("Loaded resource is not a Mesh: " + str(original_path))
 			else:
 				VertexPainterLog.error("Original file not found: " + str(original_path))
 		
-		# 2. Cleanup Data Node
+		# 2. Cleanup Data Node - remove all (by type and by name for orphans)
 		for child in mesh_instance.get_children():
-			if child is VertexColorData:
+			if child is VertexColorData or child.name == "VertexColorData":
 				child.queue_free()
 				
 		# 3. Cleanup Metadata (Optional - keeps it clean)

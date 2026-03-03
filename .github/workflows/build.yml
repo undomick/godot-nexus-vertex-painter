@@ -68,19 +68,23 @@ jobs:
           python3 -m pip install scons
           scons --version
 
-      - name: Build godot-cpp
+      - name: Build godot-cpp (editor, template_debug, template_release)
         working-directory: src/godot-cpp
         env:
           SCONS_CACHE: ${{ github.workspace }}/.scons-cache
         run: |
-          scons platform=linux target=editor arch=x86_64 -j$(nproc)
+          for target in editor template_debug template_release; do
+            scons platform=linux target=$target arch=x86_64 -j$(nproc)
+          done
 
-      - name: Build extension
+      - name: Build extension (editor, template_debug, template_release)
         working-directory: src
         env:
           SCONS_CACHE: ${{ github.workspace }}/.scons-cache
         run: |
-          scons platform=linux target=editor arch=x86_64 -j$(nproc)
+          for target in editor template_debug template_release; do
+            scons platform=linux target=$target arch=x86_64 -j$(nproc)
+          done
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
@@ -121,19 +125,23 @@ jobs:
           python3 -m pip install scons
           scons --version
 
-      - name: Build godot-cpp
+      - name: Build godot-cpp (editor, template_debug, template_release)
         working-directory: src/godot-cpp
         env:
           SCONS_CACHE: ${{ github.workspace }}/.scons-cache
         run: |
-          scons platform=windows target=editor arch=x86_64 -j$(nproc)
+          for target in editor template_debug template_release; do
+            scons platform=windows target=$target arch=x86_64 -j$(nproc)
+          done
 
-      - name: Build extension
+      - name: Build extension (editor, template_debug, template_release)
         working-directory: src
         env:
           SCONS_CACHE: ${{ github.workspace }}/.scons-cache
         run: |
-          scons platform=windows target=editor arch=x86_64 -j$(nproc)
+          for target in editor template_debug template_release; do
+            scons platform=windows target=$target arch=x86_64 -j$(nproc)
+          done
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
@@ -167,19 +175,23 @@ jobs:
           python3 -m pip install --break-system-packages scons
           scons --version
 
-      - name: Build godot-cpp
+      - name: Build godot-cpp (editor, template_debug, template_release)
         working-directory: src/godot-cpp
         env:
           SCONS_CACHE: ${{ github.workspace }}/.scons-cache
         run: |
-          scons platform=macos target=editor arch=universal -j$(sysctl -n hw.ncpu)
+          for target in editor template_debug template_release; do
+            scons platform=macos target=$target arch=universal -j$(sysctl -n hw.ncpu)
+          done
 
-      - name: Build extension
+      - name: Build extension (editor, template_debug, template_release)
         working-directory: src
         env:
           SCONS_CACHE: ${{ github.workspace }}/.scons-cache
         run: |
-          scons platform=macos target=editor arch=universal -j$(sysctl -n hw.ncpu)
+          for target in editor template_debug template_release; do
+            scons platform=macos target=$target arch=universal -j$(sysctl -n hw.ncpu)
+          done
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4

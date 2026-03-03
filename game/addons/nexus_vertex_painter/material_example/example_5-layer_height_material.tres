@@ -1,0 +1,11 @@
+[gd_resource type="ShaderMaterial" format=3 uid="uid://72eays7wrm7g"]
+
+[ext_resource type="Shader" uid="uid://c4s0gj5tte7bb" path="res://addons/nexus_vertex_painter/shaders/vertex_color_material_blend_height.gdshader" id="1_7woim"]
+
+[resource]
+render_priority = 0
+shader = ExtResource("1_7woim")
+shader_parameter/uv_scale = 1.0
+shader_parameter/blend_softness = 0.0
+shader_parameter/normal_scale = 1.0
+shader_parameter/height_map_blend_influence = 0.0

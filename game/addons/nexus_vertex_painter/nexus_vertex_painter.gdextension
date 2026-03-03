@@ -12,9 +12,12 @@ linux.editor.x86_64 = "res://addons/nexus_vertex_painter/bin/linux/nexus_vertex_
 macos.editor.universal = "res://addons/nexus_vertex_painter/bin/macos/nexus_vertex_painter.macos.editor.universal.dylib"
 
 ; Template (for exported games)
+; Debug uses template_debug DLL (built by scons) - editor DLL may be outdated
 windows.debug.x86_64 = "res://addons/nexus_vertex_painter/bin/windows/nexus_vertex_painter.windows.template_debug.x86_64.dll"
 windows.release.x86_64 = "res://addons/nexus_vertex_painter/bin/windows/nexus_vertex_painter.windows.template_release.x86_64.dll"
-linux.debug.x86_64 = "res://addons/nexus_vertex_painter/bin/linux/nexus_vertex_painter.linux.template_debug.x86_64.so"
+; Debug uses editor .so - compatible per godot-cpp
+linux.debug.x86_64 = "res://addons/nexus_vertex_painter/bin/linux/nexus_vertex_painter.linux.editor.x86_64.so"
 linux.release.x86_64 = "res://addons/nexus_vertex_painter/bin/linux/nexus_vertex_painter.linux.template_release.x86_64.so"
-macos.debug.universal = "res://addons/nexus_vertex_painter/bin/macos/nexus_vertex_painter.macos.template_debug.universal.dylib"
+; Debug uses editor dylib - compatible per godot-cpp
+macos.debug.universal = "res://addons/nexus_vertex_painter/bin/macos/nexus_vertex_painter.macos.editor.universal.dylib"
 macos.release.universal = "res://addons/nexus_vertex_painter/bin/macos/nexus_vertex_painter.macos.template_release.universal.dylib"

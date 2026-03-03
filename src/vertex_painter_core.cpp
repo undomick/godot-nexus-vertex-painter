@@ -1,6 +1,10 @@
 #include "vertex_painter_core.h"
+#include <godot_cpp/classes/array_mesh.hpp>
+#include <godot_cpp/classes/material.hpp>
 #include <godot_cpp/classes/mesh_data_tool.hpp>
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/variant/array.hpp>
+#include <godot_cpp/variant/typed_array.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 #include <cmath>
 
@@ -25,6 +29,14 @@ void VertexPainterCore::_bind_methods() {
 	ClassDB::bind_method(
 			D_METHOD("fill_surface", "colors", "channels", "is_fill"),
 			&VertexPainterCore::fill_surface);
+
+	ClassDB::bind_method(
+			D_METHOD("apply_colors_to_mesh", "source_mesh", "surface_colors", "surface_materials"),
+			&VertexPainterCore::apply_colors_to_mesh);
+
+	ClassDB::bind_method(
+			D_METHOD("pack_colors_to_rgba8", "colors"),
+			&VertexPainterCore::pack_colors_to_rgba8);
 }
 
 static inline double sample_image_at_uv(Image *img, double u, double v) {
@@ -56,6 +68,8 @@ static double get_triplanar_sample(
 		double radius,
 		double brush_angle,
 		Image *img) {
+	if (radius <= 0.0) return 0.0;
+
 	Vector3 blending = vert_normal.abs();
 	blending.x = blending.x * blending.x * blending.x * blending.x;
 	blending.y = blending.y * blending.y * blending.y * blending.y;
@@ -123,8 +137,12 @@ PackedColorArray VertexPainterCore::paint_surface(
 		double p_curv_sensitivity,
 		bool p_curv_invert) {
 
-	PackedColorArray colors = p_colors;
+	if (p_brush_size <= 0.0 || p_falloff >= 1.0) return p_colors;
+
 	int vertex_count = p_positions.size();
+	if ((int)p_colors.size() < vertex_count) return p_colors;
+
+	PackedColorArray colors = p_colors;
 	PackedColorArray colors_read;
 	if (p_mode == 3 || p_mode == 4) {
 		colors_read.resize(vertex_count);
@@ -162,7 +180,7 @@ PackedColorArray VertexPainterCore::paint_surface(
 		if (p_use_curv_mask && i < p_normals.size()) {
 			Variant key = i;
 			if (p_neighbor_map.has(key)) {
-				Array neighbors = p_neighbor_map[key];
+				PackedInt32Array neighbors = p_neighbor_map[key];
 				if (!neighbors.is_empty()) {
 					Vector3 avg_normal = Vector3(0, 0, 0);
 					for (int j = 0; j < neighbors.size(); j++) {
@@ -215,13 +233,14 @@ PackedColorArray VertexPainterCore::paint_surface(
 		if (p_mode == 3) { // BLUR
 			Variant key = i;
 			if (!p_neighbor_map.has(key)) continue;
-			Array neighbors = p_neighbor_map[key];
+			PackedInt32Array neighbors = p_neighbor_map[key];
 			if (neighbors.is_empty()) continue;
 
 			Vector4 neighbor_avg(0, 0, 0, 0);
 			double count = 0.0;
 			for (int j = 0; j < neighbors.size(); j++) {
 				int n_idx = neighbors[j];
+				if (n_idx < 0 || n_idx >= vertex_count) continue;
 				Color nc = colors_read[n_idx];
 				neighbor_avg.x += (p_channels.x > 0) ? nc.r : color.r;
 				neighbor_avg.y += (p_channels.y > 0) ? nc.g : color.g;
@@ -238,13 +257,14 @@ PackedColorArray VertexPainterCore::paint_surface(
 		} else if (p_mode == 4) { // SHARPEN
 			Variant key = i;
 			if (!p_neighbor_map.has(key)) continue;
-			Array neighbors = p_neighbor_map[key];
+			PackedInt32Array neighbors = p_neighbor_map[key];
 			if (neighbors.is_empty()) continue;
 
 			Vector4 neighbor_avg(0, 0, 0, 0);
 			double count = 0.0;
 			for (int j = 0; j < neighbors.size(); j++) {
 				int n_idx = neighbors[j];
+				if (n_idx < 0 || n_idx >= vertex_count) continue;
 				Color nc = colors_read[n_idx];
 				neighbor_avg.x += (p_channels.x > 0) ? nc.r : color.r;
 				neighbor_avg.y += (p_channels.y > 0) ? nc.g : color.g;
@@ -320,6 +340,144 @@ PackedColorArray VertexPainterCore::fill_surface(
 		colors[i] = c;
 	}
 	return colors;
+}
+
+Ref<ArrayMesh> VertexPainterCore::apply_colors_to_mesh(
+		const Ref<Mesh> &p_source_mesh,
+		const Dictionary &p_surface_colors,
+		const Dictionary &p_surface_materials) {
+	Ref<ArrayMesh> result;
+	if (p_source_mesh.is_null()) return result;
+
+	result.instantiate();
+	result->clear_surfaces();
+
+	const uint32_t FMT_TEX_UV = (uint32_t)Mesh::ARRAY_FORMAT_TEX_UV;
+	const uint32_t FMT_TEX_UV2 = (uint32_t)Mesh::ARRAY_FORMAT_TEX_UV2;
+	const uint32_t FMT_TANGENT = (uint32_t)Mesh::ARRAY_FORMAT_TANGENT;
+
+	int surface_count = p_source_mesh->get_surface_count();
+	for (int surf_idx = 0; surf_idx < surface_count; surf_idx++) {
+		Ref<MeshDataTool> mdt;
+		mdt.instantiate();
+		if (mdt->create_from_surface(p_source_mesh, surf_idx) != OK) {
+			continue;
+		}
+
+		int vertex_count = mdt->get_vertex_count();
+		int face_count = mdt->get_face_count();
+		// Use source mesh format - more reliable than mdt->get_format() for compressed meshes
+		uint64_t fmt = 0;
+		ArrayMesh *arr_mesh = Object::cast_to<ArrayMesh>(p_source_mesh.ptr());
+		if (arr_mesh) {
+			fmt = arr_mesh->surface_get_format(surf_idx);
+		} else {
+			fmt = mdt->get_format();
+		}
+
+		PackedVector3Array vertices;
+		vertices.resize(vertex_count);
+		PackedVector3Array normals;
+		normals.resize(vertex_count);
+		PackedColorArray colors;
+		colors.resize(vertex_count);
+
+		Variant colors_var = p_surface_colors.get(surf_idx, Variant());
+		if (colors_var.get_type() == Variant::PACKED_COLOR_ARRAY) {
+			PackedColorArray src_colors = colors_var;
+			for (int i = 0; i < vertex_count && i < src_colors.size(); i++) {
+				colors[i] = src_colors[i];
+			}
+			for (int i = src_colors.size(); i < vertex_count; i++) {
+				colors[i] = Color(0, 0, 0, 1);
+			}
+		} else {
+			colors.fill(Color(0, 0, 0, 1));
+		}
+
+		for (int i = 0; i < vertex_count; i++) {
+			vertices[i] = mdt->get_vertex(i);
+			normals[i] = mdt->get_vertex_normal(i);
+		}
+
+		PackedInt32Array indices;
+		indices.resize(face_count * 3);
+		for (int f = 0; f < face_count; f++) {
+			indices[f * 3 + 0] = mdt->get_face_vertex(f, 0);
+			indices[f * 3 + 1] = mdt->get_face_vertex(f, 1);
+			indices[f * 3 + 2] = mdt->get_face_vertex(f, 2);
+		}
+
+		Array arrays;
+		arrays.resize(Mesh::ARRAY_MAX);
+		arrays[Mesh::ARRAY_VERTEX] = vertices;
+		arrays[Mesh::ARRAY_NORMAL] = normals;
+		arrays[Mesh::ARRAY_COLOR] = colors;
+		arrays[Mesh::ARRAY_INDEX] = indices;
+
+		if (fmt & FMT_TEX_UV) {
+			PackedVector2Array uvs;
+			uvs.resize(vertex_count);
+			for (int i = 0; i < vertex_count; i++) {
+				uvs[i] = mdt->get_vertex_uv(i);
+			}
+			arrays[Mesh::ARRAY_TEX_UV] = uvs;
+		}
+		if (fmt & FMT_TEX_UV2) {
+			PackedVector2Array uv2;
+			uv2.resize(vertex_count);
+			for (int i = 0; i < vertex_count; i++) {
+				uv2[i] = mdt->get_vertex_uv2(i);
+			}
+			arrays[Mesh::ARRAY_TEX_UV2] = uv2;
+		}
+		if (fmt & FMT_TANGENT) {
+			PackedFloat32Array tangents;
+			tangents.resize(vertex_count * 4);
+			for (int i = 0; i < vertex_count; i++) {
+				Plane t = mdt->get_vertex_tangent(i);
+				tangents[i * 4 + 0] = t.normal.x;
+				tangents[i * 4 + 1] = t.normal.y;
+				tangents[i * 4 + 2] = t.normal.z;
+				tangents[i * 4 + 3] = t.d;
+			}
+			arrays[Mesh::ARRAY_TANGENT] = tangents;
+		}
+
+		result->add_surface_from_arrays(
+				Mesh::PRIMITIVE_TRIANGLES,
+				arrays,
+				TypedArray<Array>(),
+				Dictionary(),
+				0);
+
+		int last_surface = result->get_surface_count() - 1;
+		Variant mat_var = p_surface_materials.get(surf_idx, Variant());
+		if (mat_var.get_type() == Variant::OBJECT) {
+			Ref<Material> mat(mat_var);
+			if (!mat.is_null()) {
+				result->surface_set_material(last_surface, mat);
+			}
+		}
+	}
+
+	return result;
+}
+
+PackedByteArray VertexPainterCore::pack_colors_to_rgba8(const PackedColorArray &p_colors) {
+	PackedByteArray result;
+	int n = p_colors.size();
+	result.resize(n * 4);
+	uint8_t *dst = result.ptrw();
+	for (int i = 0; i < n; i++) {
+		Color c = p_colors[i];
+		int ofs = i * 4;
+		dst[ofs + 0] = (uint8_t)c.get_r8();
+		dst[ofs + 1] = (uint8_t)c.get_g8();
+		dst[ofs + 2] = (uint8_t)c.get_b8();
+		dst[ofs + 3] = (uint8_t)c.get_a8();
+	}
+	return result;
 }
 
 }

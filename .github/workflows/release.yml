@@ -63,26 +63,34 @@ jobs:
           python3 -m pip install --break-system-packages scons
           scons --version
 
-      - name: Build godot-cpp
+      - name: Build godot-cpp (editor, template_debug, template_release)
         working-directory: src/godot-cpp
         env:
           SCONS_CACHE: ${{ github.workspace }}/.scons-cache
         run: |
           if [ "${{ matrix.platform }}" = "macos" ]; then
-            scons platform=macos target=editor arch=universal -j$(sysctl -n hw.ncpu)
+            for target in editor template_debug template_release; do
+              scons platform=macos target=$target arch=universal -j$(sysctl -n hw.ncpu)
+            done
           else
-            scons platform=${{ matrix.platform }} target=editor arch=x86_64 -j$(nproc)
+            for target in editor template_debug template_release; do
+              scons platform=${{ matrix.platform }} target=$target arch=x86_64 -j$(nproc)
+            done
           fi
 
-      - name: Build extension
+      - name: Build extension (editor, template_debug, template_release)
         working-directory: src
         env:
           SCONS_CACHE: ${{ github.workspace }}/.scons-cache
         run: |
           if [ "${{ matrix.platform }}" = "macos" ]; then
-            scons platform=macos target=editor arch=universal -j$(sysctl -n hw.ncpu)
+            for target in editor template_debug template_release; do
+              scons platform=macos target=$target arch=universal -j$(sysctl -n hw.ncpu)
+            done
           else
-            scons platform=${{ matrix.platform }} target=editor arch=x86_64 -j$(nproc)
+            for target in editor template_debug template_release; do
+              scons platform=${{ matrix.platform }} target=$target arch=x86_64 -j$(nproc)
+            done
           fi
 
       - name: Upload ${{ matrix.artifact-name }}
@@ -134,7 +142,7 @@ jobs:
             echo "2. Extract into your project – the \`addons/\` folder merges with your project's \`addons/\`."
             echo "3. Enable the addon in Project → Project Settings → Plugins."
             echo ""
-            echo "The zip includes binaries for Windows, Linux, and macOS. Godot automatically uses the one for your OS."
+            echo "The zip includes binaries for Windows, Linux, and macOS (editor + export). Godot picks the right one for your OS and export type."
             echo "RELEASE_BODY"
           } >> $GITHUB_OUTPUT
 

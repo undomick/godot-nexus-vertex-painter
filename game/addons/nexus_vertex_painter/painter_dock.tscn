@@ -189,6 +189,11 @@ layout_mode = 2
 script = ExtResource("2_gpvri")
 title = "Smart Masking"
 
+[node name="MaskPreviewCheck" type="CheckBox" parent="MaskContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Preview Smart Mask"
+
 [node name="HBoxContainerMaskSlope" type="HBoxContainer" parent="MaskContainer"]
 layout_mode = 2
 
