@@ -10,7 +10,14 @@
           "column": 3,
           "severity": 4,
           "message": 5
-        },
+        }
+      ],
+      "severity": "warning",
+      "source": "gcc"
+    },
+    {
+      "owner": "gcc-nocol",
+      "pattern": [
         {
           "regexp": "^(.*):(\\d+):\\s+(warning|error|fatal error):\\s+(.*)$",
           "file": 1,
