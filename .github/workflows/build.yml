@@ -32,6 +32,7 @@ jobs:
             src:
               - 'src/**'
               - 'game/addons/nexus_vertex_painter/**'
+              - '.github/**'
 
       - id: result
         run: |
