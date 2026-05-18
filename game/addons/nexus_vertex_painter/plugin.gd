@@ -1435,10 +1435,15 @@ func _bake_vertex_color_data_in_scene(scene_root: Node) -> bool:
 	return baked_any
 
 func _save_scene_root_to_path(scene_root: Node, path: String) -> bool:
+	var save_root := scene_root.duplicate()
+	var original_transform := scene_root.property_get_revert(&"transform")
+	if original_transform:
+		save_root.transform = original_transform
+
 	var lower_path = path.to_lower()
 	if lower_path.ends_with(".tscn") or lower_path.ends_with(".scn"):
 		var packed_scene := PackedScene.new()
-		var pack_error := packed_scene.pack(scene_root)
+		var pack_error := packed_scene.pack(save_root)
 		if pack_error != OK:
 			VertexPainterLog.error("Failed to pack scene root for saving: " + error_string(pack_error))
 			return false
@@ -1452,7 +1457,7 @@ func _save_scene_root_to_path(scene_root: Node, path: String) -> bool:
 		var gltf_document := GLTFDocument.new()
 		var gltf_state := GLTFState.new()
 		gltf_state.base_path = path.get_base_dir()
-		var append_error := gltf_document.append_from_scene(scene_root, gltf_state)
+		var append_error := gltf_document.append_from_scene(save_root, gltf_state)
 		if append_error != OK:
 			VertexPainterLog.error("Failed to convert scene to glTF: " + error_string(append_error))
 			return false
