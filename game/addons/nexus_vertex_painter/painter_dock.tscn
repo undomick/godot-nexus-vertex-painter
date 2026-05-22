@@ -418,6 +418,12 @@ layout_mode = 2
 size_flags_horizontal = 3
 text = "Bake to Mesh"
 
+[node name="BakeScene_Button" type="Button" parent="ProductionContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Bake to Scene"
+
 [node name="Revert_Button" type="Button" parent="ProductionContainer/HBoxContainer"]
 unique_name_in_owner = true
 layout_mode = 2

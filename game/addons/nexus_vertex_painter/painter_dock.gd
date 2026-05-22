@@ -8,6 +8,7 @@ signal clear_requested(active_channels)
 signal procedural_requested(type, settings)
 signal texture_changed(texture)
 signal bake_requested()
+signal bake_to_scene_requested()
 signal revert_requested()
 
 # --- UI REFERENCES (Unique Names) ---
@@ -61,6 +62,7 @@ signal revert_requested()
 
 # Production
 @onready var btn_bake: Button = %Bake_Button
+@onready var btn_bake_scene: Button = %BakeScene_Button
 @onready var btn_revert: Button = %Revert_Button
 
 # Internal State
@@ -150,6 +152,8 @@ func _ready() -> void:
 	# 9. Setup Bake & Revert
 	if not btn_bake.pressed.is_connected(_on_bake_pressed):
 		btn_bake.pressed.connect(_on_bake_pressed)
+	if not btn_bake_scene.pressed.is_connected(_on_bake_to_scene_pressed):
+		btn_bake_scene.pressed.connect(_on_bake_to_scene_pressed)
 	
 	if not btn_revert.pressed.is_connected(_on_revert_pressed):
 		btn_revert.pressed.connect(_on_revert_pressed)
@@ -204,6 +208,7 @@ func _setup_tooltips() -> void:
 	if btn_proc_slope: btn_proc_slope.tooltip_text = "Procedural: paint sloped surfaces"
 	if btn_proc_noise: btn_proc_noise.tooltip_text = "Procedural: apply noise pattern"
 	if btn_bake: btn_bake.tooltip_text = "Bake vertex colors into mesh file"
+	if btn_bake_scene: btn_bake_scene.tooltip_text = "Bake vertex colors into the ancestor scene file"
 	if btn_revert: btn_revert.tooltip_text = "Revert to original mesh (irreversible)"
 	if size_slider: size_slider.tooltip_text = "Brush size. Ctrl+RMB drag: vertical"
 	if falloff_slider: falloff_slider.tooltip_text = "Brush falloff. Shift+RMB drag: vertical"
@@ -298,6 +303,8 @@ func _on_texture_changed(tex: Texture2D):
 	emit_signal("texture_changed", tex)
 func _on_bake_pressed():
 	emit_signal("bake_requested")
+func _on_bake_to_scene_pressed():
+	emit_signal("bake_to_scene_requested")
 func _on_revert_pressed():
 	emit_signal("revert_requested")
 

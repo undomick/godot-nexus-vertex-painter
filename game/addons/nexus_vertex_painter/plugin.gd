@@ -7,6 +7,7 @@ const LARGE_MESH_VERTEX_WARN := 500000
 const VERTEX_COLOR_DATA_SCRIPT := "res://addons/nexus_vertex_painter/vertex_color_data.gd"
 
 # --- UI & REFERENCES ---
+var dock: EditorDock
 var dock_instance: Control
 var btn_mode: Button
 var shared_brush_material: ShaderMaterial 
@@ -48,14 +49,30 @@ var revert_confirm_dialog: ConfirmationDialog
 
 
 func _enter_tree():
+	# Create new EditorDock
+	dock = EditorDock.new()
+	dock.title = "Vertex Painter"
+	dock.default_slot = EditorDock.DOCK_SLOT_RIGHT_UL
+	
+	# Setup dock icon
+	var editor_base = get_editor_interface().get_base_control()
+	if editor_base.has_theme_icon("Edit", "EditorIcons"):
+		dock.dock_icon = editor_base.get_theme_icon("Edit", "EditorIcons")
+	
+	# Instantiate dock content and add it to the EditorDock
 	dock_instance = DOCK_SCENE.instantiate()
-	add_control_to_dock(DOCK_SLOT_RIGHT_UL, dock_instance)
+	dock.add_child(dock_instance)
+	
+	# Add dock to the editor
+	add_dock(dock)
+	
 	dock_instance.fill_requested.connect(_on_fill_requested)
 	dock_instance.clear_requested.connect(_on_clear_requested)
 	dock_instance.settings_changed.connect(_on_settings_changed)
 	dock_instance.texture_changed.connect(_on_texture_changed)
 	dock_instance.procedural_requested.connect(_on_procedural_requested)
 	dock_instance.bake_requested.connect(_on_bake_requested)
+	dock_instance.bake_to_scene_requested.connect(_on_bake_to_scene_requested)
 	dock_instance.revert_requested.connect(_on_revert_requested)
 	dock_instance.set_ui_active(false)
 	
@@ -80,7 +97,6 @@ func _enter_tree():
 	file_dialog.file_selected.connect(_on_bake_file_selected)
 	get_editor_interface().get_base_control().add_child(file_dialog)
 	
-	var editor_base = get_editor_interface().get_base_control()
 	if editor_base.has_theme_icon("Edit", "EditorIcons"):
 		btn_mode.icon = editor_base.get_theme_icon("Edit", "EditorIcons")
 	
@@ -136,9 +152,9 @@ func _exit_tree():
 	if file_dialog:
 		file_dialog.queue_free()
 	
-	if dock_instance:
-		remove_control_from_docks(dock_instance)
-		dock_instance.free()
+	if dock:
+		remove_dock(dock)
+		dock.queue_free()
 	
 	if btn_mode:
 		remove_control_from_container(CONTAINER_SPATIAL_EDITOR_MENU, btn_mode)
@@ -160,6 +176,7 @@ func _on_mode_toggled(pressed: bool):
 		is_adjusting_brush = false
 		dock_instance.set_selection_empty(false)
 	else:
+		dock.make_visible()
 		_refresh_selection_and_colliders()
 		_update_brush_image_cache()
 		dock_instance.set_selection_empty(selected_meshes.is_empty())
@@ -187,9 +204,13 @@ func _on_selection_changed():
 # --- SELECTION & LOCKING ---
 
 func _refresh_selection_and_colliders():
-	var selection = get_editor_interface().get_selection().get_selected_nodes()
+	var selection := get_editor_interface().get_selection().get_selected_nodes()
 	var new_mesh_list: Array[MeshInstance3D] = []
-	
+
+	selection = selection.filter(func(node):
+		return is_instance_valid(node)
+	)
+
 	for node in selection:
 		if node is MeshInstance3D:
 			new_mesh_list.append(node)
@@ -219,7 +240,10 @@ func _refresh_selection_and_colliders():
 			_create_collider_for(mesh)
 	
 	for i in range(temp_colliders.size() - 1, -1, -1):
-		var node = temp_colliders[i]
+		var node := temp_colliders[i]
+		if not is_instance_valid(node):
+			temp_colliders.remove_at(i)
+			continue
 		if not is_instance_valid(node.get_parent()) or node.get_parent() not in new_mesh_list:
 			node.queue_free()
 			temp_colliders.remove_at(i)
@@ -1049,6 +1073,8 @@ func _init_shared_brush_material():
 
 func _update_shader_debug_view():
 	for mesh in selected_meshes:
+		if not is_instance_valid(mesh):
+			continue
 		var mat = mesh.get_active_material(0) as ShaderMaterial
 		if mat:
 			mat.set_shader_parameter("active_layer_view", 0)
@@ -1283,13 +1309,52 @@ func _on_bake_requested():
 	file_dialog.current_file = original_name + "_painted.res"
 	file_dialog.popup_centered_ratio(0.5)
 
+func _on_bake_to_scene_requested():
+	if selected_meshes.is_empty():
+		VertexPainterLog.warn("No mesh selected to bake. Please select a MeshInstance3D.")
+		return
+
+	var mesh_instance = selected_meshes[0]
+	if not mesh_instance.mesh:
+		VertexPainterLog.warn("Selected mesh has no mesh resource. Cannot bake.")
+		return
+
+	var scene_root := _get_ancestor_scene_root(mesh_instance)
+	if not scene_root:
+		VertexPainterLog.warn("Selected mesh is not part of a saved scene. Open a saved .tscn, .scn, .gltf, or .glb scene to bake to scene file.")
+		return
+	
+	var current_scene_root := get_editor_interface().get_edited_scene_root()
+
+	var scene_path := scene_root.scene_file_path
+	if scene_path == "":
+		VertexPainterLog.warn("Ancestor scene has no file path. Save the scene before baking to file.")
+		return
+
+	if not _bake_vertex_color_data_in_scene(scene_root):
+		VertexPainterLog.warn("Bake to Scene aborted because no mesh data could be baked.")
+		return
+
+	_on_mode_toggled(false)
+
+	if not _save_scene_root_to_path(scene_root, scene_path):
+		VertexPainterLog.error("Failed to save scene to " + scene_path)
+		return
+
+	get_editor_interface().get_resource_filesystem().reimport_files([scene_path])
+	get_editor_interface().reload_scene_from_path(current_scene_root.scene_file_path)
+
+	_on_mode_toggled(true)
+
+	print_rich("[color=cyan]Baked vertex colors into scene file: %s.[/color]" % scene_path)
+
 func _on_bake_file_selected(path: String):
 	if selected_meshes.is_empty(): return
 	var mesh_instance = selected_meshes[0]
 	if not mesh_instance.mesh:
 		VertexPainterLog.error("Cannot bake: selected mesh has no mesh resource.")
 		return
-	var data_node = _get_or_create_data_node(mesh_instance)
+	var data_node := _get_or_create_data_node(mesh_instance)
 	
 	# Ensure colors are applied to the mesh instance currently
 	data_node._apply_colors()
@@ -1326,6 +1391,84 @@ func _on_bake_file_selected(path: String):
 	# Refresh UI state and clear preview overlays (baked mesh replaced original)
 	_clear_preview_overlays(false)
 	_refresh_selection_and_colliders()
+
+func _get_ancestor_scene_root(node: Node) -> Node:
+	var current := node
+	while current:
+		if current.scene_file_path != "":
+			return current
+		current = current.get_parent()
+	return get_editor_interface().get_edited_scene_root()
+
+func _bake_vertex_color_data_in_scene(scene_root: Node) -> bool:
+	if not scene_root:
+		return false
+
+	var data_nodes: Array = scene_root.find_children("*", "VertexColorData", true, false)
+	if data_nodes.is_empty():
+		return true
+
+	var baked_any := false
+	var nodes_to_remove: Array[VertexColorData] = []
+	for data_node in data_nodes:
+		if not is_instance_valid(data_node):
+			continue
+		var mesh_instance := data_node.get_parent() as MeshInstance3D
+		if not mesh_instance or not mesh_instance.mesh:
+			continue
+		data_node._apply_colors()
+		mesh_instance.mesh = mesh_instance.mesh.duplicate()
+		undo_snapshots.erase(data_node)
+		nodes_to_remove.append(data_node)
+		baked_any = true
+
+	if baked_any:
+		get_undo_redo().clear_history(false)
+		for data_node in nodes_to_remove:
+			if not is_instance_valid(data_node):
+				continue
+			var parent := data_node.get_parent()
+			if parent:
+				parent.remove_child(data_node)
+			data_node.free()
+
+	return baked_any
+
+func _save_scene_root_to_path(scene_root: Node, path: String) -> bool:
+	var save_root := scene_root.duplicate()
+	var original_transform := scene_root.property_get_revert(&"transform")
+	if original_transform:
+		save_root.transform = original_transform
+
+	var lower_path = path.to_lower()
+	if lower_path.ends_with(".tscn") or lower_path.ends_with(".scn"):
+		var packed_scene := PackedScene.new()
+		var pack_error := packed_scene.pack(save_root)
+		if pack_error != OK:
+			VertexPainterLog.error("Failed to pack scene root for saving: " + error_string(pack_error))
+			return false
+		var save_error := ResourceSaver.save(packed_scene, path)
+		if save_error != OK:
+			VertexPainterLog.error("Failed to save packed scene: " + error_string(save_error))
+			return false
+		return true
+
+	if lower_path.ends_with(".gltf") or lower_path.ends_with(".glb"):
+		var gltf_document := GLTFDocument.new()
+		var gltf_state := GLTFState.new()
+		gltf_state.base_path = path.get_base_dir()
+		var append_error := gltf_document.append_from_scene(save_root, gltf_state)
+		if append_error != OK:
+			VertexPainterLog.error("Failed to convert scene to glTF: " + error_string(append_error))
+			return false
+		var write_error := gltf_document.write_to_filesystem(gltf_state, path)
+		if write_error != OK:
+			VertexPainterLog.error("Failed to write glTF scene: " + error_string(write_error))
+			return false
+		return true
+
+	VertexPainterLog.error("Unsupported scene file type for Bake to Scene: " + path)
+	return false
 
 # --- REVERT LOGIC ---
 
