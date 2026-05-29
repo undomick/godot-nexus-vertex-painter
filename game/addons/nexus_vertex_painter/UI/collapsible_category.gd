@@ -28,7 +28,8 @@ func _ready() -> void:
 
 	_header_btn.toggled.connect(_on_toggle)
 	add_child(_header_btn)
-	move_child(_header_btn, 0)
+	if _header_btn.get_index() != 0:
+		move_child(_header_btn, 0)
 	_on_toggle(start_open)
 
 

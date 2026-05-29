@@ -38,7 +38,10 @@ var _paint_motion_counter: int = 0
 var _preview_stored_state: Dictionary = {}
 
 var file_dialog: EditorFileDialog
+var snapshot_export_dialog: EditorFileDialog
+var snapshot_import_dialog: EditorFileDialog
 var revert_confirm_dialog: ConfirmationDialog
+var _pending_snapshot_export: VertexColorPaintSnapshot = null
 
 var _colliders := VertexPaintColliders.new()
 var _stroke := VertexPaintStroke.new()
@@ -68,6 +71,8 @@ func _enter_tree():
 	dock_instance.bake_requested.connect(_on_bake_requested)
 	dock_instance.bake_to_scene_requested.connect(_on_bake_to_scene_requested)
 	dock_instance.revert_requested.connect(_on_revert_requested)
+	dock_instance.export_snapshot_requested.connect(_on_export_snapshot_requested)
+	dock_instance.transfer_snapshot_requested.connect(_on_transfer_snapshot_requested)
 	dock_instance.show_vertex_colors_toggled.connect(_on_show_vertex_colors_toggled)
 	dock_instance.set_ui_active(false)
 
@@ -90,6 +95,20 @@ func _enter_tree():
 	file_dialog.filters = ["*.tres", "*.res"]
 	file_dialog.file_selected.connect(_on_bake_file_selected)
 	get_editor_interface().get_base_control().add_child(file_dialog)
+
+	snapshot_export_dialog = EditorFileDialog.new()
+	snapshot_export_dialog.file_mode = EditorFileDialog.FILE_MODE_SAVE_FILE
+	snapshot_export_dialog.access = EditorFileDialog.ACCESS_RESOURCES
+	snapshot_export_dialog.filters = PackedStringArray(["*.tres", "*.res"])
+	snapshot_export_dialog.file_selected.connect(_on_snapshot_export_file_selected)
+	get_editor_interface().get_base_control().add_child(snapshot_export_dialog)
+
+	snapshot_import_dialog = EditorFileDialog.new()
+	snapshot_import_dialog.file_mode = EditorFileDialog.FILE_MODE_OPEN_FILE
+	snapshot_import_dialog.access = EditorFileDialog.ACCESS_RESOURCES
+	snapshot_import_dialog.filters = PackedStringArray(["*.tres", "*.res"])
+	snapshot_import_dialog.file_selected.connect(_on_snapshot_import_file_selected)
+	get_editor_interface().get_base_control().add_child(snapshot_import_dialog)
 
 	if editor_base.has_theme_icon("Edit", "EditorIcons"):
 		btn_mode.icon = editor_base.get_theme_icon("Edit", "EditorIcons")
@@ -149,6 +168,10 @@ func _exit_tree():
 		revert_confirm_dialog.queue_free()
 	if file_dialog:
 		file_dialog.queue_free()
+	if snapshot_export_dialog:
+		snapshot_export_dialog.queue_free()
+	if snapshot_import_dialog:
+		snapshot_import_dialog.queue_free()
 
 	if dock:
 		remove_dock(dock)
@@ -373,3 +396,29 @@ func _on_revert_requested():
 
 func _do_revert():
 	_bake.do_revert(self, _colliders, _preview)
+
+
+func _on_export_snapshot_requested():
+	_bake.on_export_snapshot_requested(self)
+
+
+func _on_transfer_snapshot_requested():
+	_bake.on_transfer_snapshot_requested(self)
+
+
+func _on_snapshot_export_file_selected(path: String):
+	_bake.on_snapshot_export_file_selected(self, path)
+
+
+func _on_snapshot_import_file_selected(path: String):
+	_bake.on_snapshot_import_file_selected(self, path, _colliders, _preview)
+
+
+func _assign_scene_owner(node: Node, scene_root: Node) -> void:
+	if is_instance_valid(node) and is_instance_valid(scene_root):
+		node.owner = scene_root
+
+
+func _finish_snapshot_transfer(colliders: VertexPaintColliders, preview: VertexPaintPreview) -> void:
+	_preview.refresh_vertex_color_preview(self, colliders, selected_meshes)
+	_colliders.refresh_selection_and_colliders(self, preview)

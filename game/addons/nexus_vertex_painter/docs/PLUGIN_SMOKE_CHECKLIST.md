@@ -25,4 +25,5 @@ godot --path . --headless --script res://addons/nexus_vertex_painter/tests/run_p
 4. **Preview Smart Mask** with slope/curvature masks.
 5. **Fill** / **Clear** / **Procedural** tools.
 6. **Bake** (`.res`), **Bake to Scene**, **Revert**.
-7. **Export Paint Snapshot** / **Transfer from Snapshot** (see [VERTEX_COLOR_TRANSFER.md](VERTEX_COLOR_TRANSFER.md)).
+7. **Export Paint Snapshot** (save dialog, `.tres` with point count in Output) / **Transfer from Snapshot** (see [VERTEX_COLOR_TRANSFER.md](VERTEX_COLOR_TRANSFER.md)).
+8. **Revert** only restores meshes that have `_vertex_paint_original_path` (not the snapshot workflow).

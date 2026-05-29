@@ -176,7 +176,7 @@ func _apply_preview_to_mesh(
 	var overlay = MeshInstance3D.new()
 	overlay.name = "VertexPaint_PreviewOverlay"
 	overlay.mesh = temp_mesh
-	mesh_instance.add_child(overlay)
+	mesh_instance.add_child(overlay, true, Node.INTERNAL_MODE_BACK)
 	plugin._preview_stored_state[mesh_instance] = {"overlay_instance": overlay}
 
 
@@ -272,7 +272,7 @@ func apply_vertex_color_preview_to_mesh(
 	overlay.mesh = colored_mesh
 	overlay.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	overlay.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
-	mesh_instance.add_child(overlay)
+	mesh_instance.add_child(overlay, true, Node.INTERNAL_MODE_BACK)
 	plugin._vertex_color_preview_overlays[mesh_instance] = overlay
 
 

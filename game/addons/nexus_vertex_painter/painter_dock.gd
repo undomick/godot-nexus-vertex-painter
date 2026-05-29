@@ -205,7 +205,8 @@ func _setup_empty_selection_label() -> void:
 	label.add_theme_font_size_override("font_size", 12)
 	label.modulate = Color(0.7, 0.7, 0.7, 0.9)
 	add_child(label)
-	move_child(label, 0)
+	if label.get_index() != 0:
+		move_child(label, 0)
 	label.visible = false
 
 

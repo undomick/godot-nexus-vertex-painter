@@ -107,14 +107,14 @@ func _create_collider_for(plugin: EditorPlugin, mesh_instance: MeshInstance3D) -
 	sb.collision_mask = 0
 	sb.owner = null
 
-	mesh_instance.add_child(sb)
+	mesh_instance.add_child(sb, true, Node.INTERNAL_MODE_BACK)
 	plugin.temp_colliders.append(sb)
 
 	var phantom = MeshInstance3D.new()
 	phantom.mesh = mesh_instance.mesh
 	phantom.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	phantom.material_override = plugin.shared_brush_material
-	mesh_instance.add_child(phantom)
+	mesh_instance.add_child(phantom, true, Node.INTERNAL_MODE_BACK)
 	plugin.temp_colliders.append(phantom)
 
 
@@ -147,11 +147,11 @@ func get_or_create_data_node(plugin: EditorPlugin, mesh_instance: MeshInstance3D
 
 	var node = VertexColorData.new()
 	node.name = "VertexColorData"
-	mesh_instance.add_child(node)
+	mesh_instance.add_child(node, true)
 	node.initialize_from_mesh()
 
 	var scene_root = plugin.get_editor_interface().get_edited_scene_root()
 	if scene_root:
-		node.owner = scene_root
+		plugin.call_deferred("_assign_scene_owner", node, scene_root)
 
 	return node

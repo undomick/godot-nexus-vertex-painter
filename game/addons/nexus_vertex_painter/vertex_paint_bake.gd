@@ -268,3 +268,125 @@ func do_revert(plugin: EditorPlugin, colliders: VertexPaintColliders, preview: V
 	else:
 		VertexPainterLog.warn(
 				"No mesh could be reverted. Select a painted MeshInstance3D with a valid original path.")
+
+
+func on_export_snapshot_requested(plugin: EditorPlugin) -> void:
+	if plugin.selected_meshes.is_empty():
+		VertexPainterLog.warn("No mesh selected. Select a MeshInstance3D to export a paint snapshot.")
+		return
+
+	var mesh_instance: MeshInstance3D = plugin.selected_meshes[0]
+	if plugin.selected_meshes.size() > 1:
+		VertexPainterLog.warn(
+				"Multiple meshes selected; exporting snapshot for '%s' only." % mesh_instance.name)
+
+	if not mesh_instance.mesh:
+		VertexPainterLog.warn("Selected mesh has no mesh resource.")
+		return
+
+	_ensure_original_path_meta(mesh_instance)
+
+	var data_node: VertexColorData = _find_data_node(mesh_instance)
+	var snap: VertexColorPaintSnapshot = VertexColorPaintSnapshot.capture_from_mesh_instance(
+			mesh_instance, data_node)
+	if snap.colors.is_empty():
+		VertexPainterLog.warn(
+				"No vertex colors to export on '%s'. Paint first or enable vertex color preview data."
+				% mesh_instance.name)
+		return
+
+	plugin._pending_snapshot_export = snap
+	var default_name: String = mesh_instance.name + "_paint_snapshot.tres"
+	plugin.snapshot_export_dialog.current_file = default_name
+	plugin.snapshot_export_dialog.popup_centered_ratio(0.5)
+
+
+func on_snapshot_export_file_selected(plugin: EditorPlugin, path: String) -> void:
+	var snap: VertexColorPaintSnapshot = plugin._pending_snapshot_export
+	plugin._pending_snapshot_export = null
+	if snap == null:
+		return
+
+	if not path.ends_with(".tres") and not path.ends_with(".res"):
+		path += ".tres"
+
+	var err: Error = ResourceSaver.save(snap, path)
+	if err != OK:
+		VertexPainterLog.error("Failed to save paint snapshot: " + error_string(err))
+		return
+
+	print_rich(
+			"[color=cyan]Vertex Painter: exported %d color samples to %s[/color]"
+			% [snap.colors.size(), path])
+
+
+func on_transfer_snapshot_requested(plugin: EditorPlugin) -> void:
+	if plugin.selected_meshes.is_empty():
+		VertexPainterLog.warn("No mesh selected. Select the reimported MeshInstance3D for transfer.")
+		return
+	plugin.snapshot_import_dialog.popup_centered_ratio(0.5)
+
+
+func on_snapshot_import_file_selected(
+		plugin: EditorPlugin,
+		path: String,
+		colliders: VertexPaintColliders,
+		preview: VertexPaintPreview) -> void:
+	if plugin.selected_meshes.is_empty():
+		return
+
+	var snapshot: VertexColorPaintSnapshot = load(path) as VertexColorPaintSnapshot
+	if snapshot == null:
+		VertexPainterLog.error("Could not load paint snapshot: " + path)
+		return
+	if snapshot.colors.is_empty():
+		VertexPainterLog.warn("Paint snapshot has no color data: " + path)
+		return
+
+	var settings: Dictionary = plugin.dock_instance.get_settings()
+	var options: Dictionary = {
+		"max_distance": settings.get("transfer_max_distance", 0.5),
+		"use_normal_filter": settings.get("transfer_use_normal_filter", true),
+		"unmatched_fill": settings.get("transfer_unmatched_fill", VertexColorTransfer.UNMATCHED_BLACK),
+	}
+
+	var transferred: int = 0
+	for mesh_instance in plugin.selected_meshes:
+		if not is_instance_valid(mesh_instance) or not mesh_instance.mesh:
+			continue
+		_ensure_original_path_meta(mesh_instance)
+		var surface_colors: Dictionary = VertexColorTransfer.transfer_to_mesh(
+				snapshot, mesh_instance, options)
+		if surface_colors.is_empty():
+			VertexPainterLog.warn("Transfer produced no surfaces for '%s'." % mesh_instance.name)
+			continue
+
+		var data_node: VertexColorData = colliders.get_or_create_data_node(plugin, mesh_instance)
+		for surf_idx in surface_colors.keys():
+			data_node.update_surface_colors(int(surf_idx), surface_colors[surf_idx])
+		transferred += 1
+
+	if transferred == 0:
+		VertexPainterLog.warn("Transfer failed for all selected meshes.")
+		return
+
+	print_rich(
+			"[color=cyan]Vertex Painter: transferred snapshot onto %d mesh(es). Review with Show vertex colors.[/color]"
+			% transferred)
+	# Defer preview/collider refresh so the editor scene tree does not race move_child on new children.
+	plugin.call_deferred("_finish_snapshot_transfer", colliders, preview)
+
+
+func _ensure_original_path_meta(mesh_instance: MeshInstance3D) -> void:
+	if mesh_instance.has_meta("_vertex_paint_original_path"):
+		return
+	var path: String = infer_original_mesh_path(mesh_instance)
+	if not path.is_empty():
+		mesh_instance.set_meta("_vertex_paint_original_path", path)
+
+
+func _find_data_node(mesh_instance: MeshInstance3D) -> VertexColorData:
+	for child in mesh_instance.get_children():
+		if child is VertexColorData:
+			return child as VertexColorData
+	return null
