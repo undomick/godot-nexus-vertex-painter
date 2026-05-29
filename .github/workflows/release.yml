@@ -1,182 +1,245 @@
-name: Release
-
-on:
-  push:
-    tags:
-      - "v*"
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-permissions:
-  contents: write
-
-env:
-  GODOT_VERSION: "4.6"
-  ADDON_AUTHOR: "Michael Kulzer"
-
-jobs:
-  build-and-release:
-    name: Build and Release
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-22.04
-            platform: linux
-            artifact-name: linux-editor-x86_64
-          - os: ubuntu-22.04
-            platform: windows
-            artifact-name: windows-editor-x86_64
-          - os: macos-latest
-            platform: macos
-            artifact-name: macos-editor-universal
-
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          submodules: recursive
-
-      - uses: ./.github/actions/setup-godot-cpp
-
-      - name: Resolve addon version from tag
-        id: version
-        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
-      - name: Add GCC problem matcher
-        run: echo "::add-matcher::${{ github.workspace }}/.github/gcc-problem-matcher.json"
-
-      - name: Cache SCons build
-        uses: actions/cache@v5
-        with:
-          path: .scons-cache
-          key: scons-${{ runner.os }}-${{ matrix.platform }}-${{ hashFiles('src/godot-cpp/SConstruct', 'src/SConstruct', 'src/vertex_painter_core.cpp', 'src/vertex_painter_core.h', 'src/vertex_painter_constants.h') }}
-          restore-keys: |
-            scons-${{ runner.os }}-${{ matrix.platform }}-
-
-      - name: (Windows) Install mingw64
-        if: matrix.platform == 'windows'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y mingw-w64
-          sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix || true
-          sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix || true
-
-      - name: Install SCons (Linux/Windows)
-        if: matrix.platform != 'macos'
-        run: |
-          python3 -m pip install scons
-          scons --version
-
-      - name: Install SCons (macOS)
-        if: matrix.platform == 'macos'
-        run: |
-          python3 -m pip install --break-system-packages scons
-          scons --version
-
-      - name: Build godot-cpp (editor, template_debug, template_release)
-        working-directory: src/godot-cpp
-        env:
-          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
-        run: |
-          if [ "${{ matrix.platform }}" = "macos" ]; then
-            for target in editor template_debug template_release; do
-              scons platform=macos target=$target arch=universal -j$(sysctl -n hw.ncpu)
-            done
-          else
-            for target in editor template_debug template_release; do
-              scons platform=${{ matrix.platform }} target=$target arch=x86_64 -j$(nproc)
-            done
-          fi
-
-      - name: Build extension (editor, template_debug, template_release)
-        working-directory: src
-        env:
-          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
-          ADDON_VERSION: ${{ steps.version.outputs.version }}
-          ADDON_AUTHOR: ${{ env.ADDON_AUTHOR }}
-        run: |
-          if [ "${{ matrix.platform }}" = "macos" ]; then
-            for target in editor template_debug template_release; do
-              scons platform=macos target=$target arch=universal -j$(sysctl -n hw.ncpu)
-            done
-          else
-            for target in editor template_debug template_release; do
-              scons platform=${{ matrix.platform }} target=$target arch=x86_64 -j$(nproc)
-            done
-          fi
-
-      - name: Verify binaries
-        run: bash .github/scripts/verify_binaries.sh game/addons/nexus_vertex_painter/bin ${{ matrix.platform }}
-
-      - name: Upload ${{ matrix.artifact-name }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact-name }}
-          path: game/addons/nexus_vertex_painter/bin/${{ matrix.platform }}/
-
-  create-release:
-    name: Create Release
-    needs: build-and-release
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: write
-
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
-      - name: Create addon zip with all platform binaries
-        run: |
-          mkdir -p addons/nexus_vertex_painter
-          cp -r game/addons/nexus_vertex_painter/* addons/nexus_vertex_painter/
-          mkdir -p addons/nexus_vertex_painter/bin/windows addons/nexus_vertex_painter/bin/linux addons/nexus_vertex_painter/bin/macos
-          cp -r artifacts/windows-editor-x86_64/* addons/nexus_vertex_painter/bin/windows/
-          cp -r artifacts/linux-editor-x86_64/* addons/nexus_vertex_painter/bin/linux/
-          cp -r artifacts/macos-editor-universal/* addons/nexus_vertex_painter/bin/macos/
-          zip -r "godot-nexus-vertex-painter-${{ github.ref_name }}.zip" addons
-
-      - name: Verify release zip layout
-        run: |
-          bash .github/scripts/verify_binaries.sh addons/nexus_vertex_painter/bin linux
-          bash .github/scripts/verify_binaries.sh addons/nexus_vertex_painter/bin windows
-          bash .github/scripts/verify_binaries.sh addons/nexus_vertex_painter/bin macos
-
-      - name: Extract changelog for release
-        id: changelog
-        run: |
-          VERSION="${GITHUB_REF#refs/tags/v}"
-          CHANGELOG_SECTION=$(VERSION="$VERSION" python3 .github/scripts/extract_changelog.py)
-          {
-            echo 'body<<RELEASE_BODY'
-            printf '%s' "$CHANGELOG_SECTION"
-            echo ""
-            echo "### Installation"
-            echo ""
-            echo "1. Download \`godot-nexus-vertex-painter-\${{ github.ref_name }}.zip\`"
-            echo "2. Extract into your project – the \`addons/\` folder merges with your project's \`addons/\`."
-            echo "3. Enable the addon in Project → Project Settings → Plugins."
-            echo ""
-            echo "The zip includes GDExtension binaries for **Windows**, **Linux**, and **macOS** (editor, template_debug, template_release). Godot 4.6+ picks the matching library for your OS."
-            echo "RELEASE_BODY"
-          } >> $GITHUB_OUTPUT
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          name: ${{ github.ref_name }}
-          body: ${{ steps.changelog.outputs.body }}
-          draft: false
-          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
-          files: |
-            *.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  GODOT_VERSION: "4.6"
+  ADDON_AUTHOR: "Michael Kulzer"
+
+jobs:
+  godot-cpp-linux-windows:
+    name: godot-cpp (Linux + Windows)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-godot-cpp
+
+      - name: Cache godot-cpp build
+        uses: actions/cache@v5
+        with:
+          path: |
+            .scons-cache
+            src/godot-cpp/bin
+            src/godot-cpp/gen
+          key: release-godot-cpp-lw-${{ hashFiles('src/godot-cpp/SConstruct') }}
+          restore-keys: |
+            release-godot-cpp-lw-
+
+      - name: Install mingw64
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64
+          sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix || true
+          sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix || true
+
+      - name: Install SCons
+        run: python3 -m pip install scons
+
+      - name: Build godot-cpp (Linux + Windows)
+        env:
+          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
+        run: |
+          bash .github/scripts/build_godot_cpp.sh linux
+          bash .github/scripts/build_godot_cpp.sh windows
+
+      - name: Upload godot-cpp (linux + windows)
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-cpp-linux-windows
+          path: |
+            src/godot-cpp/bin
+            src/godot-cpp/gen
+
+  godot-cpp-macos:
+    name: godot-cpp (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-godot-cpp
+
+      - name: Cache godot-cpp build
+        uses: actions/cache@v5
+        with:
+          path: |
+            .scons-cache
+            src/godot-cpp/bin
+            src/godot-cpp/gen
+          key: release-godot-cpp-macos-${{ hashFiles('src/godot-cpp/SConstruct') }}
+          restore-keys: |
+            release-godot-cpp-macos-
+
+      - name: Install SCons
+        run: python3 -m pip install --break-system-packages scons
+
+      - name: Build godot-cpp (macOS)
+        env:
+          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
+        run: bash .github/scripts/build_godot_cpp.sh macos
+
+      - name: Upload godot-cpp (macOS)
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-cpp-macos
+          path: |
+            src/godot-cpp/bin
+            src/godot-cpp/gen
+
+  build-and-release:
+    name: Build (${{ matrix.platform }})
+    needs: [godot-cpp-linux-windows, godot-cpp-macos]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            platform: linux
+            artifact-name: linux-editor-x86_64
+            godot-cpp-artifact: godot-cpp-linux-windows
+          - os: ubuntu-22.04
+            platform: windows
+            artifact-name: windows-editor-x86_64
+            godot-cpp-artifact: godot-cpp-linux-windows
+          - os: macos-latest
+            platform: macos
+            artifact-name: macos-editor-universal
+            godot-cpp-artifact: godot-cpp-macos
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ./.github/actions/setup-godot-cpp
+
+      - name: Download godot-cpp
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.godot-cpp-artifact }}
+          path: src/godot-cpp
+
+      - name: Resolve addon version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Add GCC problem matcher
+        run: echo "::add-matcher::${{ github.workspace }}/.github/gcc-problem-matcher.json"
+
+      - name: Cache extension build
+        uses: actions/cache@v5
+        with:
+          path: .scons-cache
+          key: release-ext-${{ matrix.platform }}-${{ hashFiles('src/SConstruct', 'src/vertex_painter_core.cpp') }}
+          restore-keys: |
+            release-ext-${{ matrix.platform }}-
+
+      - name: (Windows) Install mingw64
+        if: matrix.platform == 'windows'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64
+          sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix || true
+          sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix || true
+
+      - name: Install SCons (Linux/Windows)
+        if: matrix.platform != 'macos'
+        run: python3 -m pip install scons
+
+      - name: Install SCons (macOS)
+        if: matrix.platform == 'macos'
+        run: python3 -m pip install --break-system-packages scons
+
+      - name: Build extension
+        env:
+          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
+          ADDON_VERSION: ${{ steps.version.outputs.version }}
+          ADDON_AUTHOR: ${{ env.ADDON_AUTHOR }}
+        run: bash .github/scripts/build_extension.sh ${{ matrix.platform }}
+
+      - name: Verify binaries
+        run: bash .github/scripts/verify_binaries.sh game/addons/nexus_vertex_painter/bin ${{ matrix.platform }}
+
+      - name: Upload ${{ matrix.artifact-name }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: game/addons/nexus_vertex_painter/bin/${{ matrix.platform }}/
+
+  create-release:
+    name: Create Release
+    needs: build-and-release
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create addon zip with all platform binaries
+        run: |
+          mkdir -p addons/nexus_vertex_painter
+          cp -r game/addons/nexus_vertex_painter/* addons/nexus_vertex_painter/
+          mkdir -p addons/nexus_vertex_painter/bin/windows addons/nexus_vertex_painter/bin/linux addons/nexus_vertex_painter/bin/macos
+          cp -r artifacts/windows-editor-x86_64/* addons/nexus_vertex_painter/bin/windows/
+          cp -r artifacts/linux-editor-x86_64/* addons/nexus_vertex_painter/bin/linux/
+          cp -r artifacts/macos-editor-universal/* addons/nexus_vertex_painter/bin/macos/
+          zip -r "godot-nexus-vertex-painter-${{ github.ref_name }}.zip" addons
+
+      - name: Verify release zip layout
+        run: |
+          bash .github/scripts/verify_binaries.sh addons/nexus_vertex_painter/bin linux
+          bash .github/scripts/verify_binaries.sh addons/nexus_vertex_painter/bin windows
+          bash .github/scripts/verify_binaries.sh addons/nexus_vertex_painter/bin macos
+
+      - name: Extract changelog for release
+        id: changelog
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          CHANGELOG_SECTION=$(VERSION="$VERSION" python3 .github/scripts/extract_changelog.py)
+          {
+            echo 'body<<RELEASE_BODY'
+            printf '%s' "$CHANGELOG_SECTION"
+            echo ""
+            echo "### Installation"
+            echo ""
+            echo "1. Download \`godot-nexus-vertex-painter-\${{ github.ref_name }}.zip\`"
+            echo "2. Extract into your project – the \`addons/\` folder merges with your project's \`addons/\`."
+            echo "3. Enable the addon in Project → Project Settings → Plugins."
+            echo ""
+            echo "The zip includes GDExtension binaries for **Windows**, **Linux**, and **macOS** (editor, template_debug, template_release). Godot 4.6+ picks the matching library for your OS."
+            echo "RELEASE_BODY"
+          } >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          body: ${{ steps.changelog.outputs.body }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+          files: |
+            *.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

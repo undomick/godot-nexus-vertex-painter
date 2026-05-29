@@ -37,6 +37,8 @@ env = SConscript("godot-cpp/SConstruct", {"env": env, "customs": customs})
 
 # Clone so version/author defines apply only to this extension, not godot-cpp objects.
 env = env.Clone()
+# Match .gdextension paths (no lib prefix on Linux/macOS; MinGW also defaults to lib).
+env.Replace(SHLIBPREFIX="")
 env.Append(
     CPPDEFINES=[
         ("NEXUS_VERTEX_PAINTER_VERSION", '\\"%s\\"' % addon_version),

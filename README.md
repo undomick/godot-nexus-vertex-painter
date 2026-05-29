@@ -3,7 +3,7 @@
 [![Discord](https://img.shields.io/discord/1446024019341086864?label=Discord&logo=discord&style=flat-square&color=5865F2)](https://discord.gg/VTSpAEHHhW)
 [![Ko-fi](https://img.shields.io/badge/Support%20me-Ko--fi-F16061?style=flat-square&logo=ko-fi&logoColor=white)](https://ko-fi.com/jundrie)
 
-A professional vertex color painting tool for **Godot 4.6+** with manual brush painting and procedural generation on 3D meshes. Based on [undomick/godot-nexus-vertex-painter](https://github.com/undomick/godot-nexus-vertex-painter) with C++ GDExtension and extended editor features.
+A professional vertex color painting tool for **Godot 4.6+** with manual brush painting and procedural generation on 3D meshes.
 
 ## Features
 
