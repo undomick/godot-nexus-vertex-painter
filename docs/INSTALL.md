@@ -45,11 +45,15 @@ Or with git submodules (after clone):
 git submodule update --init --recursive
 ```
 
+If `src/godot-cpp` is empty after clone, run `scripts/install_dependencies.sh` (or the PowerShell script). CI uses the same fallback when the submodule gitlink is not in the tree yet.
+
+**godot-cpp branch:** For Godot **4.6**, clone branch **`4.5`** (there is no `4.6` branch on [godot-cpp](https://github.com/godotengine/godot-cpp) yet; 4.5 bindings are compatible with Godot 4.6).
+
 Manual clone (`src/` folder):
 
 ```bash
 cd src
-git clone -b 4.6 https://github.com/godotengine/godot-cpp godot-cpp
+git clone -b 4.5 https://github.com/godotengine/godot-cpp godot-cpp
 cd godot-cpp && git submodule update --init --recursive && cd ../..
 ```
 

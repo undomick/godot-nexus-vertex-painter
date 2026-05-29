@@ -4,7 +4,8 @@
 # Prerequisites: Git, Python 3 with SCons (pip install scons)
 
 param(
-    [string]$GodotCppBranch = "4.6"
+    # Godot 4.6: use godot-cpp branch 4.5 until upstream publishes a 4.6 branch.
+    [string]$GodotCppBranch = "4.5"
 )
 
 $ErrorActionPreference = "Stop"
@@ -42,20 +43,22 @@ try {
     Write-Host "  You need SCons to build the C++ extension." -ForegroundColor Yellow
 }
 
-# Clone godot-cpp if not present
-if (Test-Path $GodotCppDir) {
-    $contents = Get-ChildItem $GodotCppDir -Force | Where-Object { $_.Name -notmatch "^\." }
-    if ($contents.Count -gt 0) {
-        Write-Host "godot-cpp already exists. Skipping clone." -ForegroundColor Green
-        $SkipClone = $true
-    }
+if ((Test-Path $GodotCppDir) -and -not (Test-Path (Join-Path $GodotCppDir "SConstruct"))) {
+    Write-Host "Removing incomplete godot-cpp directory..." -ForegroundColor Yellow
+    Remove-Item -Recurse -Force $GodotCppDir
+}
+
+$SkipClone = $false
+if (Test-Path (Join-Path $GodotCppDir "SConstruct")) {
+    Write-Host "godot-cpp already exists. Skipping clone." -ForegroundColor Green
+    $SkipClone = $true
 }
 
 if (-not $SkipClone) {
     Write-Host "Cloning godot-cpp (branch $GodotCppBranch)..." -ForegroundColor Cyan
     Push-Location $SrcDir
     try {
-        git clone -b $GodotCppBranch https://github.com/godotengine/godot-cpp godot-cpp
+        git clone -b $GodotCppBranch --depth 1 https://github.com/godotengine/godot-cpp godot-cpp
         if ($LASTEXITCODE -ne 0) { throw "git clone failed" }
     } finally {
         Pop-Location

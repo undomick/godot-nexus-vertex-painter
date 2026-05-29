@@ -6,6 +6,8 @@ runs:
   steps:
     - name: Ensure godot-cpp checkout
       shell: bash
+      env:
+        GODOT_CPP_BRANCH: "4.5"
       run: |
         if [ -f src/godot-cpp/SConstruct ]; then
           echo "godot-cpp already present."

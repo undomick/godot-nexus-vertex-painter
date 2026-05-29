@@ -28,7 +28,7 @@ Or manually:
 
 ```bash
 cd src
-git clone -b 4.6 https://github.com/godotengine/godot-cpp godot-cpp
+git clone -b 4.5 https://github.com/godotengine/godot-cpp godot-cpp
 cd godot-cpp
 git submodule update --init --recursive
 cd ..
@@ -90,6 +90,6 @@ Open the Godot project (`game/`), ensure the addon is enabled. The GDExtension l
 
 ## Troubleshooting
 
-- **Godot version mismatch**: Use godot-cpp branch `4.6` for Godot 4.6.x.
+- **Godot version mismatch**: For Godot 4.6.x use godot-cpp branch `4.5` (no `4.6` branch upstream yet).
 - **custom_api_file**: If bindings fail, run `godot --dump-extension-api` and pass `custom_api_file=path/to/extension_api.json` to the godot-cpp scons command.
 - **Editor vs template**: Use `target=editor` when testing in the editor; use `target=template_debug` or `target=template_release` for exported games.

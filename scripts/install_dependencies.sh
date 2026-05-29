@@ -2,7 +2,8 @@
 # Clone godot-cpp and init submodules. Run from project root.
 set -euo pipefail
 
-GODOT_CPP_BRANCH="${GODOT_CPP_BRANCH:-4.6}"
+# Godot 4.6: use godot-cpp branch 4.5 until upstream publishes a 4.6 branch.
+GODOT_CPP_BRANCH="${GODOT_CPP_BRANCH:-4.5}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SRC_DIR="$PROJECT_ROOT/src"
@@ -29,8 +30,13 @@ else
 	echo "Warning: scons not found. Install with: pip install scons"
 fi
 
+if [ -d "$GODOT_CPP_DIR" ] && [ ! -f "$GODOT_CPP_DIR/SConstruct" ]; then
+	echo "Removing incomplete godot-cpp directory..."
+	rm -rf "$GODOT_CPP_DIR"
+fi
+
 SKIP_CLONE=0
-if [ -d "$GODOT_CPP_DIR" ] && [ -n "$(ls -A "$GODOT_CPP_DIR" 2>/dev/null | grep -v '^\.')" ]; then
+if [ -f "$GODOT_CPP_DIR/SConstruct" ]; then
 	echo "godot-cpp already exists. Skipping clone."
 	SKIP_CLONE=1
 fi
@@ -39,7 +45,7 @@ if [ "$SKIP_CLONE" -eq 0 ]; then
 	echo "Cloning godot-cpp (branch $GODOT_CPP_BRANCH)..."
 	(
 		cd "$SRC_DIR"
-		git clone -b "$GODOT_CPP_BRANCH" https://github.com/godotengine/godot-cpp godot-cpp
+		git clone -b "$GODOT_CPP_BRANCH" --depth 1 https://github.com/godotengine/godot-cpp godot-cpp
 	)
 fi
 
