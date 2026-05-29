@@ -39,6 +39,8 @@ jobs:
         with:
           submodules: recursive
 
+      - uses: ./.github/actions/setup-godot-cpp
+
       - name: Resolve addon version from tag
         id: version
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT

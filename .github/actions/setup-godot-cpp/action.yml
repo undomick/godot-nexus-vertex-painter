@@ -1,0 +1,18 @@
+name: Setup godot-cpp
+description: Ensure godot-cpp exists (submodule or install_dependencies.sh clone)
+
+runs:
+  using: composite
+  steps:
+    - name: Ensure godot-cpp checkout
+      shell: bash
+      run: |
+        if [ -f src/godot-cpp/SConstruct ]; then
+          echo "godot-cpp already present."
+          if [ -f src/godot-cpp/.gitmodules ]; then
+            git -C src/godot-cpp submodule update --init --recursive
+          fi
+          exit 0
+        fi
+        echo "godot-cpp missing after checkout; cloning via install_dependencies.sh"
+        bash scripts/install_dependencies.sh
