@@ -58,7 +58,8 @@ if env.get("target") in ["editor", "template_debug"]:
     except AttributeError:
         pass
 
-suffix = env["suffix"].replace(".dev", "").replace(".universal", "")
+# Keep ".universal" on macOS so output names match .gdextension paths.
+suffix = env["suffix"].replace(".dev", "")
 lib_filename = "{}{}{}{}".format(
     env.subst("$SHLIBPREFIX"), libname, suffix, env.subst("$SHLIBSUFFIX")
 )
