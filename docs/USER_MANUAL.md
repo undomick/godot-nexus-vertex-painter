@@ -43,13 +43,31 @@ Use the **Falloff** slider in settings to control sharpness/softness of procedur
 
 - **Slope Mask**: Limit painting to surfaces within a slope angle. Invert to paint only steep surfaces.
 - **Curvature Mask**: Limit painting to flat or curved areas based on neighbor-normal similarity.
+- **Preview Smart Mask**: Temporary white/black overlay on the mesh showing which vertices would pass the active masks (does not change painted data).
+
+## Projection (Settings)
+
+- **Both sides** (default): Paint affects all vertices inside the brush volume.
+- **Front only**: Only vertices facing the raycast hit normal are painted (reduces accidental back-face painting on thin geometry).
+
+## Vertex color preview
+
+- **Show vertex colors**: Renders painted colors as an overlay on top of your materials while editing.
+- **VC overlay**: Slider for overlay strength (0 = invisible, 1 = full vertex colors).
+
+Undo/redo and painting update this overlay automatically when it is enabled.
 
 ## Bake & Revert
 
-- **Bake**: Saves the current vertex colors into the mesh file (`.res`). The `VertexColorData` node is removed and colors become permanent.
-- **Revert**: Restores the mesh to its original state from the saved resource path (if available).
+- **Bake**: Saves vertex colors into a new mesh resource file (`.res` / `.tres`). The `VertexColorData` child node is removed; colors are permanent on that mesh resource.
+- **Bake to Scene**: Bakes all `VertexColorData` nodes under the ancestor scene file (`.tscn`, `.scn`, `.gltf`, `.glb`), saves that scene, and reloads it. Requires the scene to be saved to disk first.
+- **Revert**: Restores the mesh from `_vertex_paint_original_path` metadata and removes `VertexColorData` / preview materials.
 
 **Important**: Revert is irreversible once the original file is overwritten. Use with care.
+
+## Paint snapshot (Blender reimport)
+
+When you replace mesh geometry in Blender and reimport, use **Export Paint Snapshot** and **Transfer from Snapshot** in the dock. See the addon doc [VERTEX_COLOR_TRANSFER.md](../game/addons/nexus_vertex_painter/docs/VERTEX_COLOR_TRANSFER.md) (path after install: `addons/nexus_vertex_painter/docs/VERTEX_COLOR_TRANSFER.md`).
 
 ## Project Settings
 
@@ -59,6 +77,10 @@ Use the **Falloff** slider in settings to control sharpness/softness of procedur
 ## Supported Meshes
 
 Only **ArrayMesh** is supported. Primitive meshes (BoxMesh, SphereMesh, etc.) are not supported for painting.
+
+On the **first paint stroke**, meshes that store colors only in `ARRAY_CUSTOM` (e.g. Blender face-corner layers) are normalized to `ARRAY_COLOR` so painting and GPU sync work reliably. The original mesh path is stored for **Revert**.
+
+For performance tips (uncompressed glTF, sync modes), see [PERFORMANCE.md](../game/addons/nexus_vertex_painter/docs/PERFORMANCE.md).
 
 ## 5-Layer Vertex Color Material Shader
 

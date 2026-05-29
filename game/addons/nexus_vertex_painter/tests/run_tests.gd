@@ -10,10 +10,13 @@ var _frame_count := 0
 func _initialize() -> void:
 	var test_node_1 = load("res://addons/nexus_vertex_painter/tests/test_vertex_color_data.gd").new()
 	var test_node_2 = load("res://addons/nexus_vertex_painter/tests/test_mesh_attribute_preservation.gd").new()
+	var test_node_3 = load("res://addons/nexus_vertex_painter/tests/test_surface_color_binding.gd").new()
 	root.add_child(test_node_1)
 	root.add_child(test_node_2)
+	root.add_child(test_node_3)
 	_test_nodes.append(test_node_1)
 	_test_nodes.append(test_node_2)
+	_test_nodes.append(test_node_3)
 
 
 func _idle(_delta: float) -> bool:

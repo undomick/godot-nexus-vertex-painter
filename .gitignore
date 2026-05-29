@@ -1,3 +1,7 @@
 # Blender project files (excluded from git push)
 blender/
 
+# GDExtension binaries (built locally or from CI release artifacts)
+game/addons/nexus_vertex_painter/bin/**/*
+!game/addons/nexus_vertex_painter/bin/**/.gitkeep
+!game/addons/nexus_vertex_painter/bin/.gitkeep

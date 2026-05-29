@@ -9,6 +9,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
+env:
+  GODOT_VERSION: "4.6"
+  ADDON_AUTHOR: "Michael Kulzer"
+
 jobs:
   build-and-release:
     name: Build and Release
@@ -28,18 +35,22 @@ jobs:
             artifact-name: macos-editor-universal
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
+
+      - name: Resolve addon version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
 
       - name: Add GCC problem matcher
         run: echo "::add-matcher::${{ github.workspace }}/.github/gcc-problem-matcher.json"
 
       - name: Cache SCons build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .scons-cache
-          key: scons-${{ runner.os }}-${{ matrix.platform }}-${{ hashFiles('src/godot-cpp/SConstruct', 'src/SConstruct', 'src/vertex_painter_core.cpp', 'src/vertex_painter_core.h') }}
+          key: scons-${{ runner.os }}-${{ matrix.platform }}-${{ hashFiles('src/godot-cpp/SConstruct', 'src/SConstruct', 'src/vertex_painter_core.cpp', 'src/vertex_painter_core.h', 'src/vertex_painter_constants.h') }}
           restore-keys: |
             scons-${{ runner.os }}-${{ matrix.platform }}-
 
@@ -82,6 +93,8 @@ jobs:
         working-directory: src
         env:
           SCONS_CACHE: ${{ github.workspace }}/.scons-cache
+          ADDON_VERSION: ${{ steps.version.outputs.version }}
+          ADDON_AUTHOR: ${{ env.ADDON_AUTHOR }}
         run: |
           if [ "${{ matrix.platform }}" = "macos" ]; then
             for target in editor template_debug template_release; do
@@ -92,6 +105,9 @@ jobs:
               scons platform=${{ matrix.platform }} target=$target arch=x86_64 -j$(nproc)
             done
           fi
+
+      - name: Verify binaries
+        run: bash .github/scripts/verify_binaries.sh game/addons/nexus_vertex_painter/bin ${{ matrix.platform }}
 
       - name: Upload ${{ matrix.artifact-name }}
         uses: actions/upload-artifact@v4
@@ -107,7 +123,7 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -118,7 +134,6 @@ jobs:
 
       - name: Create addon zip with all platform binaries
         run: |
-          # Single zip: addon with bin/windows/, bin/linux/, bin/macos/ – Godot picks the right one for the OS
           mkdir -p addons/nexus_vertex_painter
           cp -r game/addons/nexus_vertex_painter/* addons/nexus_vertex_painter/
           mkdir -p addons/nexus_vertex_painter/bin/windows addons/nexus_vertex_painter/bin/linux addons/nexus_vertex_painter/bin/macos
@@ -126,6 +141,12 @@ jobs:
           cp -r artifacts/linux-editor-x86_64/* addons/nexus_vertex_painter/bin/linux/
           cp -r artifacts/macos-editor-universal/* addons/nexus_vertex_painter/bin/macos/
           zip -r "godot-nexus-vertex-painter-${{ github.ref_name }}.zip" addons
+
+      - name: Verify release zip layout
+        run: |
+          bash .github/scripts/verify_binaries.sh addons/nexus_vertex_painter/bin linux
+          bash .github/scripts/verify_binaries.sh addons/nexus_vertex_painter/bin windows
+          bash .github/scripts/verify_binaries.sh addons/nexus_vertex_painter/bin macos
 
       - name: Extract changelog for release
         id: changelog
@@ -142,7 +163,7 @@ jobs:
             echo "2. Extract into your project – the \`addons/\` folder merges with your project's \`addons/\`."
             echo "3. Enable the addon in Project → Project Settings → Plugins."
             echo ""
-            echo "The zip includes binaries for Windows, Linux, and macOS (editor + export). Godot picks the right one for your OS and export type."
+            echo "The zip includes GDExtension binaries for **Windows**, **Linux**, and **macOS** (editor, template_debug, template_release). Godot 4.6+ picks the matching library for your OS."
             echo "RELEASE_BODY"
           } >> $GITHUB_OUTPUT
 

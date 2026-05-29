@@ -6,7 +6,7 @@ Performance-critical vertex painting logic implemented in C++ via GDExtension.
 
 ## Prerequisites
 
-- Godot 4.2+ (tested with 4.6)
+- Godot 4.6+
 - Python 3.x with SCons (`pip install scons`)
 - C++ compiler (MSVC on Windows, GCC/Clang on Linux, Xcode on macOS)
 
@@ -14,13 +14,27 @@ Performance-critical vertex painting logic implemented in C++ via GDExtension.
 
 ### 1. Clone godot-cpp
 
+From the project root:
+
+```bash
+# Windows
+.\scripts\install_dependencies.ps1
+
+# Linux / macOS
+./scripts/install_dependencies.sh
+```
+
+Or manually:
+
 ```bash
 cd src
-git clone -b 4.2 https://github.com/godotengine/godot-cpp godot-cpp
+git clone -b 4.6 https://github.com/godotengine/godot-cpp godot-cpp
 cd godot-cpp
 git submodule update --init --recursive
 cd ..
 ```
+
+If the repo uses submodules: `git submodule update --init --recursive` from the project root.
 
 ### 2. Build godot-cpp bindings
 
@@ -34,19 +48,41 @@ cd ..
 
 ### 3. Build the extension
 
+From `src/`, build all targets used by the addon (`editor`, `template_debug`, `template_release`):
+
+| OS | SCons platform | arch |
+|----|----------------|------|
+| Windows | `windows` | `x86_64` |
+| Linux | `linux` | `x86_64` |
+| macOS | `macos` | `universal` |
+
 ```bash
-# From src folder - use target=editor for editor development
-scons platform=windows target=editor
+# Example: Windows editor
+scons platform=windows target=editor arch=x86_64
+
+# Example: Linux release export
+scons platform=linux target=template_release arch=x86_64
+
+# Example: macOS (universal)
+scons platform=macos target=editor arch=universal
 ```
 
-The compiled library is written to `game/addons/nexus_vertex_painter/bin/windows/` (or linux/, macos/).
+Output: `game/addons/nexus_vertex_painter/bin/<platform>/`.
 
-For exported games, build with template targets:
+### Version metadata
+
+Release version and author are defined in `vertex_painter_constants.h` (defaults) and can be overridden at build time:
 
 ```bash
-scons platform=windows target=template_debug   # Debug exports
-scons platform=windows target=template_release  # Release exports
+# Windows PowerShell
+$env:ADDON_VERSION="2.2.0"; $env:ADDON_AUTHOR="Michael Kulzer"
+scons platform=windows target=editor arch=x86_64
+
+# Linux / macOS
+ADDON_VERSION=2.2.0 ADDON_AUTHOR="Michael Kulzer" scons platform=linux target=editor arch=x86_64
 ```
+
+Keep in sync with `game/addons/nexus_vertex_painter/plugin.cfg` when bumping releases.
 
 ### 4. Verify
 
@@ -54,6 +90,6 @@ Open the Godot project (`game/`), ensure the addon is enabled. The GDExtension l
 
 ## Troubleshooting
 
-- **Godot version mismatch**: Use the godot-cpp branch matching your Godot version (4.2, 4.3, etc.). For Godot 4.6, try branch `4.2` or the latest stable.
+- **Godot version mismatch**: Use godot-cpp branch `4.6` for Godot 4.6.x.
 - **custom_api_file**: If bindings fail, run `godot --dump-extension-api` and pass `custom_api_file=path/to/extension_api.json` to the godot-cpp scons command.
 - **Editor vs template**: Use `target=editor` when testing in the editor; use `target=template_debug` or `target=template_release` for exported games.

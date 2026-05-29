@@ -4,7 +4,7 @@
 # Prerequisites: Git, Python 3 with SCons (pip install scons)
 
 param(
-    [string]$GodotCppBranch = "4.2"
+    [string]$GodotCppBranch = "4.6"
 )
 
 $ErrorActionPreference = "Stop"

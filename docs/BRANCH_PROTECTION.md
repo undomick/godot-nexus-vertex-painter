@@ -1,24 +1,23 @@
-# Branch Protection einrichten
+# Branch protection setup
 
-Branch Protection sorgt dafür, dass Änderungen nur per Pull Request und mit bestandenem CI-Build in die Haupt-Branch gelangen. Da dies über die GitHub-Weboberfläche konfiguriert wird, kann es nicht per Repo-Dateien gesetzt werden.
+Branch protection ensures changes reach the default branch only via pull request and with a passing CI build. This is configured in the GitHub web UI; it cannot be set from repository files.
 
-## Schritte
+## Steps
 
-1. Öffne **Settings** des Repositories auf GitHub.
-2. Gehe zu **Branches** (unter "Code and automation").
-3. Unter **Branch protection rules** klicke **Add branch protection rule** (oder bearbeite die bestehende Regel).
-4. **Branch name pattern**: `main` oder `master` (je nachdem, welcher Branch euer Standard-Branch ist).
-5. Aktiviere:
-   - **Require a pull request before merging** (optional: "Require approvals" setzen).
+1. Open the repository **Settings** on GitHub.
+2. Go to **Branches** (under "Code and automation").
+3. Under **Branch protection rules**, click **Add branch protection rule** (or edit the existing rule).
+4. **Branch name pattern**: `main` or `master` (whichever is your default branch).
+5. Enable:
+   - **Require a pull request before merging** (optionally enable **Require approvals**).
    - **Require status checks to pass before merging**.
-6. Unter **Status checks that are required**:
-   - Wähle **Search for status checks** und suche nach `Linux`, `Windows`, `macOS` (die Jobs aus dem Build GDExtension Workflow).
-   - Oder gib `build-linux` / `build-windows` / `build-macos` ein, falls die Job-Namen dort auftauchen.
-   - Alternativ reicht es oft, **"Build GDExtension"** als erforderlichen Check zu setzen, sofern der gesamte Workflow als ein Check erscheint.
-7. Speichere mit **Create** bzw. **Save changes**.
+6. Under **Status checks that are required**:
+   - Use **Search for status checks** and select the three **Build GDExtension** jobs: `build-linux`, `build-windows`, `build-macos` (see `.github/workflows/build.yml`).
+   - Alternatively, require **Build GDExtension** as a single check if the workflow appears that way in the UI.
+7. Save with **Create** or **Save changes**.
 
-## Resultat
+## Outcome
 
-- Pull Requests können nur gemerged werden, wenn der Build-Workflow erfolgreich durchläuft.
-- Direkte Pushes auf die geschützte Branch sind blockiert (außer für Admins, falls nicht explizit deaktiviert).
-- Der `main`/`master`-Branch bleibt dadurch stets build-fähig.
+- Pull requests can merge only when the build workflow succeeds.
+- Direct pushes to the protected branch are blocked (except for admins, unless that bypass is allowed).
+- The `main`/`master` branch stays buildable.

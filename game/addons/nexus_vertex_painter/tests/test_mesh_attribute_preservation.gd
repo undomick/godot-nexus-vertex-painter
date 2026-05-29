@@ -173,6 +173,7 @@ func _run_all_tests() -> void:
 	test_meshdatatool_commit_preserves_uvs()
 	test_uvs_preserved_via_manual_apply()
 	test_uvs_preserved_after_apply_colors_sync()
+	test_runtime_mesh_enables_fast_color_path()
 
 
 func test_uvs_preserved_after_apply_colors_sync() -> void:
@@ -216,3 +217,34 @@ func test_uvs_preserved_after_apply_colors_sync() -> void:
 		if not original_uvs[i].is_equal_approx(result_uvs[i]):
 			_fail("UV sync: UV[%d] changed from %s to %s" % [i, original_uvs[i], result_uvs[i]])
 			return
+
+
+func test_runtime_mesh_enables_fast_color_path() -> void:
+	var mesh_instance = MeshInstance3D.new()
+	mesh_instance.mesh = _create_mesh_with_uvs()
+	add_child(mesh_instance)
+
+	var data_node = VertexColorData.new()
+	data_node.name = "VertexColorData"
+	mesh_instance.add_child(data_node)
+	data_node.initialize_from_mesh()
+	data_node._apply_colors()
+
+	var runtime: ArrayMesh = mesh_instance.mesh as ArrayMesh
+	if runtime == null:
+		_fail("Fast path: runtime mesh is not ArrayMesh")
+		return
+
+	data_node._cache_source_arrays(runtime)
+	data_node._detect_paint_sync_mode(runtime)
+
+	var colors := data_node.surface_data[0] as PackedColorArray
+	colors[0] = Color(1, 0, 0, 1)
+	var uploaded: bool = false
+	if data_node._uses_arrays_color_sync(0):
+		data_node._sync_colors_via_arrays_runtime_mesh()
+		uploaded = true
+	elif data_node._try_fast_color_update(0, colors):
+		uploaded = true
+	if not uploaded:
+		_fail("Color upload: arrays sync and attribute path both failed")

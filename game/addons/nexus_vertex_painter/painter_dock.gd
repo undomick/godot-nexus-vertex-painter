@@ -10,6 +10,9 @@ signal texture_changed(texture)
 signal bake_requested()
 signal bake_to_scene_requested()
 signal revert_requested()
+signal show_vertex_colors_toggled(pressed: bool)
+signal export_snapshot_requested()
+signal transfer_snapshot_requested()
 
 # --- UI REFERENCES (Unique Names) ---
 
@@ -20,7 +23,11 @@ signal revert_requested()
 @onready var falloff_edit: LineEdit = %BrushSizeLineEdit2
 @onready var strength_slider: Slider = %BrushStrengthSlider
 @onready var strength_edit: LineEdit = %BrushSizeLineEdit3
+@onready var projection_option: OptionButton = %ProjectionOption
 @onready var texture_drop: PanelContainer = %TextureDropZone
+
+const PROJECTION_BOTH_SIDES := 0
+const PROJECTION_FRONT_ONLY := 1
 
 # Smart Masking UI - Preview
 @onready var mask_preview_check: CheckBox = %MaskPreviewCheck
@@ -60,6 +67,19 @@ signal revert_requested()
 @onready var btn_proc_slope: Button = %Proc_Slope_Btn
 @onready var btn_proc_noise: Button = %Proc_Noise_Btn
 
+# Vertex color preview (under Channels in dock)
+@onready var btn_show_vertex_colors: Button = %ShowVertexColors_Button
+@onready var vc_preview_strength_slider: HSlider = %VCPreviewStrengthSlider
+@onready var vc_preview_strength_value: LineEdit = %VCPreviewStrengthValue
+
+# Transfer (snapshot export / reimport)
+@onready var btn_export_snapshot: Button = %ExportSnapshot_Button
+@onready var btn_transfer_snapshot: Button = %TransferSnapshot_Button
+@onready var transfer_max_dist_slider: HSlider = %TransferMaxDistSlider
+@onready var transfer_max_dist_value: LineEdit = %TransferMaxDistValue
+@onready var transfer_normal_check: CheckBox = %TransferNormalCheck
+@onready var transfer_unmatched_option: OptionButton = %TransferUnmatchedOption
+
 # Production
 @onready var btn_bake: Button = %Bake_Button
 @onready var btn_bake_scene: Button = %BakeScene_Button
@@ -76,7 +96,13 @@ func _ready() -> void:
 	_setup_slider_link(size_slider, size_edit, 1.0)
 	_setup_slider_link(falloff_slider, falloff_edit, 0.5)
 	_setup_slider_link(strength_slider, strength_edit, 0.25)
-	
+	if vc_preview_strength_slider and vc_preview_strength_value:
+		_setup_slider_link(vc_preview_strength_slider, vc_preview_strength_value, 0.55)
+	if projection_option and not projection_option.item_selected.is_connected(_on_settings_changed_arg):
+		projection_option.item_selected.connect(_on_settings_changed_arg)
+	if transfer_max_dist_slider and transfer_max_dist_value:
+		_setup_slider_link(transfer_max_dist_slider, transfer_max_dist_value, 0.5)
+
 	# Slope setup
 	_setup_slider_link(mask_slope_slider, mask_slope_value, 45.0)
 	
@@ -157,6 +183,12 @@ func _ready() -> void:
 	
 	if not btn_revert.pressed.is_connected(_on_revert_pressed):
 		btn_revert.pressed.connect(_on_revert_pressed)
+	if btn_show_vertex_colors and not btn_show_vertex_colors.toggled.is_connected(_on_show_vertex_colors_toggled):
+		btn_show_vertex_colors.toggled.connect(_on_show_vertex_colors_toggled)
+	if btn_export_snapshot and not btn_export_snapshot.pressed.is_connected(_on_export_snapshot_pressed):
+		btn_export_snapshot.pressed.connect(_on_export_snapshot_pressed)
+	if btn_transfer_snapshot and not btn_transfer_snapshot.pressed.is_connected(_on_transfer_snapshot_pressed):
+		btn_transfer_snapshot.pressed.connect(_on_transfer_snapshot_pressed)
 	
 	_update_all_button_visuals()
 	_update_mask_ui_state()
@@ -210,9 +242,25 @@ func _setup_tooltips() -> void:
 	if btn_bake: btn_bake.tooltip_text = "Bake vertex colors into mesh file"
 	if btn_bake_scene: btn_bake_scene.tooltip_text = "Bake vertex colors into the ancestor scene file"
 	if btn_revert: btn_revert.tooltip_text = "Revert to original mesh (irreversible)"
+	if btn_show_vertex_colors:
+		btn_show_vertex_colors.tooltip_text = "Blend painted vertex colors over the mesh materials (does not replace shaders)"
+	if vc_preview_strength_slider:
+		vc_preview_strength_slider.tooltip_text = "How strongly vertex colors are blended over the base material (0 = off, 1 = full)"
+	if btn_export_snapshot:
+		btn_export_snapshot.tooltip_text = "Save painted vertex colors as a world-space snapshot before editing mesh in Blender"
+	if btn_transfer_snapshot:
+		btn_transfer_snapshot.tooltip_text = "Load a snapshot and project colors onto the selected mesh (approximate)"
+	if transfer_max_dist_slider:
+		transfer_max_dist_slider.tooltip_text = "Max world distance to match snapshot vertices"
+	if transfer_normal_check:
+		transfer_normal_check.tooltip_text = "Only match snapshot points facing the same way"
+	if transfer_unmatched_option:
+		transfer_unmatched_option.tooltip_text = "Vertices outside max distance: Black, or color from the nearest snapshot vertex"
 	if size_slider: size_slider.tooltip_text = "Brush size. Ctrl+RMB drag: vertical"
 	if falloff_slider: falloff_slider.tooltip_text = "Brush falloff. Shift+RMB drag: vertical"
 	if strength_slider: strength_slider.tooltip_text = "Brush strength. Ctrl+RMB drag: horizontal"
+	if projection_option:
+		projection_option.tooltip_text = "Front only: paint faces toward the raycast hit (no backface bleed)"
 	if mask_preview_check: mask_preview_check.tooltip_text = "Show slope/curvature mask as grayscale overlay (white = paintable)"
 	if mask_slope_check: mask_slope_check.tooltip_text = "Limit painting to surfaces within slope angle"
 	if mask_curv_check: mask_curv_check.tooltip_text = "Limit painting by curvature (flat vs curved)"
@@ -241,8 +289,34 @@ func get_settings() -> Dictionary:
 		"mask_curv_invert": mask_curv_invert.button_pressed,
 		
 		# Preview Smart Mask
-		"preview_smart_mask": mask_preview_check.button_pressed if mask_preview_check else false
+		"preview_smart_mask": mask_preview_check.button_pressed if mask_preview_check else false,
+
+		"vertex_color_preview_strength": get_vertex_color_preview_strength(),
+
+		"projection_mode": projection_option.selected if projection_option else PROJECTION_BOTH_SIDES,
+
+		"transfer_max_distance": get_transfer_max_distance(),
+		"transfer_use_normal_filter": transfer_normal_check.button_pressed if transfer_normal_check else true,
+		"transfer_unmatched_fill": get_transfer_unmatched_fill(),
 	}
+
+
+func get_transfer_max_distance() -> float:
+	if transfer_max_dist_slider:
+		return maxf(transfer_max_dist_slider.value, 0.01)
+	return 0.5
+
+
+func get_transfer_unmatched_fill() -> int:
+	if transfer_unmatched_option:
+		return transfer_unmatched_option.selected
+	return VertexColorTransfer.UNMATCHED_BLACK
+
+
+func get_vertex_color_preview_strength() -> float:
+	if vc_preview_strength_slider:
+		return clampf(vc_preview_strength_slider.value, 0.0, 1.0)
+	return 0.55
 
 # --- API FOR MOUSE SHORTCUTS ---
 
@@ -308,6 +382,25 @@ func _on_bake_to_scene_pressed():
 func _on_revert_pressed():
 	emit_signal("revert_requested")
 
+
+func _on_export_snapshot_pressed():
+	emit_signal("export_snapshot_requested")
+
+
+func _on_transfer_snapshot_pressed():
+	emit_signal("transfer_snapshot_requested")
+
+
+func _on_show_vertex_colors_toggled(_pressed: bool) -> void:
+	_update_all_button_visuals()
+	emit_signal("show_vertex_colors_toggled", btn_show_vertex_colors.button_pressed)
+
+
+func set_show_vertex_colors_pressed(pressed: bool) -> void:
+	if btn_show_vertex_colors:
+		btn_show_vertex_colors.button_pressed = pressed
+		_update_all_button_visuals()
+
 # --- VISUAL UPDATE HELPER ---
 
 func _update_all_button_visuals():
@@ -325,6 +418,8 @@ func _update_all_button_visuals():
 	_apply_active_style(btn_set, bg_accent, accent)
 	_apply_active_style(btn_blur, bg_accent, accent)
 	_apply_active_style(btn_sharpen, bg_accent, accent)
+	if btn_show_vertex_colors:
+		_apply_active_style(btn_show_vertex_colors, bg_accent, accent)
 
 func _apply_active_style(btn: Button, bg_color: Color, border_color: Color):
 	if btn.button_pressed:

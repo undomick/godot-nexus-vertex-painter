@@ -18,6 +18,9 @@ customs = [os.path.abspath(path) for path in customs]
 opts = Variables(customs, ARGUMENTS)
 opts.Update(localEnv)
 
+addon_version = os.environ.get("ADDON_VERSION", "2.2.0")
+addon_author = os.environ.get("ADDON_AUTHOR", "Michael Kulzer")
+
 Help(opts.GenerateHelpText(localEnv))
 
 env = localEnv.Clone()
@@ -26,11 +29,20 @@ if not (os.path.isdir("godot-cpp") and os.listdir("godot-cpp")):
     print_error("""godot-cpp is not available. Clone it with:
 
  cd src
- git clone -b 4.2 https://github.com/godotengine/godot-cpp godot-cpp
+ git clone -b 4.6 https://github.com/godotengine/godot-cpp godot-cpp
  cd godot-cpp && git submodule update --init --recursive && cd ..""")
     sys.exit(1)
 
 env = SConscript("godot-cpp/SConstruct", {"env": env, "customs": customs})
+
+# Clone so version/author defines apply only to this extension, not godot-cpp objects.
+env = env.Clone()
+env.Append(
+    CPPDEFINES=[
+        ("NEXUS_VERTEX_PAINTER_VERSION", '\\"%s\\"' % addon_version),
+        ("NEXUS_VERTEX_PAINTER_AUTHOR", '\\"%s\\"' % addon_author),
+    ]
+)
 
 # Sources are in current directory (src/)
 env.Append(CPPPATH=["."])
@@ -55,7 +67,10 @@ library = env.SharedLibrary(
     source=sources,
 )
 
-# Install compiled library to addon folder only
-copy = env.Install("{}/{}/".format(addon_bin, env["platform"]), library)
+# Godot only needs the shared library at runtime. MSVC may register .lib/.exp side
+# targets that are not always emitted; copy the DLL explicitly.
+built_dll = "bin/{}/{}".format(env["platform"], lib_filename)
+installed_dll = os.path.join(addon_bin, env["platform"], lib_filename)
+copy = env.InstallAs(installed_dll, built_dll)
 
 Default(library, copy)

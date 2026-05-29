@@ -11,7 +11,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GODOT_VERSION: "4.2.2"
+  GODOT_VERSION: "4.6"
+  ADDON_VERSION: "2.2.0"
+  ADDON_AUTHOR: "Michael Kulzer"
 
 jobs:
   changes:
@@ -20,11 +22,11 @@ jobs:
     outputs:
       src: ${{ steps.result.outputs.src }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 2
 
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         if: github.event_name != 'workflow_dispatch'
         with:
@@ -48,7 +50,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.src == 'true'
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -56,10 +58,10 @@ jobs:
         run: echo "::add-matcher::${{ github.workspace }}/.github/gcc-problem-matcher.json"
 
       - name: Cache SCons build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .scons-cache
-          key: scons-Linux-linux-${{ hashFiles('src/godot-cpp/SConstruct', 'src/SConstruct', 'src/vertex_painter_core.cpp', 'src/vertex_painter_core.h') }}
+          key: scons-Linux-linux-${{ hashFiles('src/godot-cpp/SConstruct', 'src/SConstruct', 'src/vertex_painter_core.cpp', 'src/vertex_painter_core.h', 'src/vertex_painter_constants.h') }}
           restore-keys: |
             scons-Linux-linux-
 
@@ -82,10 +84,15 @@ jobs:
         working-directory: src
         env:
           SCONS_CACHE: ${{ github.workspace }}/.scons-cache
+          ADDON_VERSION: ${{ env.ADDON_VERSION }}
+          ADDON_AUTHOR: ${{ env.ADDON_AUTHOR }}
         run: |
           for target in editor template_debug template_release; do
             scons platform=linux target=$target arch=x86_64 -j$(nproc)
           done
+
+      - name: Verify Linux binaries
+        run: bash .github/scripts/verify_binaries.sh game/addons/nexus_vertex_painter/bin linux
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
@@ -99,7 +106,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.src == 'true'
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -107,10 +114,10 @@ jobs:
         run: echo "::add-matcher::${{ github.workspace }}/.github/gcc-problem-matcher.json"
 
       - name: Cache SCons build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .scons-cache
-          key: scons-Linux-windows-${{ hashFiles('src/godot-cpp/SConstruct', 'src/SConstruct', 'src/vertex_painter_core.cpp', 'src/vertex_painter_core.h') }}
+          key: scons-Linux-windows-${{ hashFiles('src/godot-cpp/SConstruct', 'src/SConstruct', 'src/vertex_painter_core.cpp', 'src/vertex_painter_core.h', 'src/vertex_painter_constants.h') }}
           restore-keys: |
             scons-Linux-windows-
 
@@ -139,10 +146,15 @@ jobs:
         working-directory: src
         env:
           SCONS_CACHE: ${{ github.workspace }}/.scons-cache
+          ADDON_VERSION: ${{ env.ADDON_VERSION }}
+          ADDON_AUTHOR: ${{ env.ADDON_AUTHOR }}
         run: |
           for target in editor template_debug template_release; do
             scons platform=windows target=$target arch=x86_64 -j$(nproc)
           done
+
+      - name: Verify Windows binaries
+        run: bash .github/scripts/verify_binaries.sh game/addons/nexus_vertex_painter/bin windows
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
@@ -156,7 +168,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.src == 'true'
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -164,10 +176,10 @@ jobs:
         run: echo "::add-matcher::${{ github.workspace }}/.github/gcc-problem-matcher.json"
 
       - name: Cache SCons build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .scons-cache
-          key: scons-macOS-macos-${{ hashFiles('src/godot-cpp/SConstruct', 'src/SConstruct', 'src/vertex_painter_core.cpp', 'src/vertex_painter_core.h') }}
+          key: scons-macOS-macos-${{ hashFiles('src/godot-cpp/SConstruct', 'src/SConstruct', 'src/vertex_painter_core.cpp', 'src/vertex_painter_core.h', 'src/vertex_painter_constants.h') }}
           restore-keys: |
             scons-macOS-macos-
 
@@ -189,10 +201,15 @@ jobs:
         working-directory: src
         env:
           SCONS_CACHE: ${{ github.workspace }}/.scons-cache
+          ADDON_VERSION: ${{ env.ADDON_VERSION }}
+          ADDON_AUTHOR: ${{ env.ADDON_AUTHOR }}
         run: |
           for target in editor template_debug template_release; do
             scons platform=macos target=$target arch=universal -j$(sysctl -n hw.ncpu)
           done
+
+      - name: Verify macOS binaries
+        run: bash .github/scripts/verify_binaries.sh game/addons/nexus_vertex_painter/bin macos
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4

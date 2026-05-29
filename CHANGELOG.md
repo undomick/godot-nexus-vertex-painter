@@ -5,6 +5,24 @@ All notable changes to Nexus Vertex Painter will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+---
+
+## [2.2.0] - 2026-05-29
+
+### Added
+
+- **Projection mode** (Settings): **Both sides** (default) or **Front only** – limits painting to vertices facing the raycast hit, useful when a large brush would otherwise affect the back of the mesh.
+- **Vertex color preview**: **Show vertex colors** blends painted vertex colors over the mesh materials via an overlay (with adjustable **VC overlay** strength), without replacing the source mesh while editing.
+- **Bake to Scene** ([PR #4](https://github.com/undomick/godot-nexus-vertex-painter/pull/4) by Robert-K): Bakes vertex colors into the ancestor scene file (`.tscn`, `.scn`, `.gltf`, `.glb`), then reimports and reloads the scene.
+- **Paint snapshot export / transfer**: Save world-space vertex colors before a Blender round-trip, then **Transfer from Snapshot** onto a reimported mesh (nearest-neighbor, optional normal filter). See `addons/nexus_vertex_painter/docs/VERTEX_COLOR_TRANSFER.md`.
+- **Face-corner / custom color attributes**: Detects colors in `ARRAY_CUSTOM` slots (not only `COLOR_0`), imports them into `surface_data`, and **normalizes to `ARRAY_COLOR` on the first paint** so Blender face-corner or custom-named layers remain editable.
+
+### Fixed
+
+- **Fast paint path** no longer disables live GPU color upload when a mesh has `ARRAY_COLOR` plus unrelated `ARRAY_CUSTOM` data.
+
+---
+
 ## [2.1.0] - 2026-03-03
 
 ### Added

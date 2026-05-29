@@ -69,6 +69,7 @@ func _run_all_tests() -> void:
 	test_get_positions_returns_cached_data()
 	test_get_normals_returns_cached_data()
 	test_empty_surface_returns_black_colors()
+	test_source_arrays_cache_stores_real_arrays()
 
 
 func test_initialize_from_mesh_imports_colors() -> void:
@@ -175,3 +176,15 @@ func test_empty_surface_returns_black_colors() -> void:
 		if c[i] != Color.BLACK:
 			_fail("empty surface: expected black, got " + str(c[i]) + " at " + str(i))
 			return
+
+
+func test_source_arrays_cache_stores_real_arrays() -> void:
+	_data_node.initialize_from_mesh()
+	_data_node._cache_source_arrays(_mesh_instance.mesh)
+	var cached: Variant = _data_node._source_arrays_cache.get(0)
+	if not cached is Array:
+		_fail("source_arrays_cache: expected Array, got " + str(typeof(cached)))
+		return
+	var arrays: Array = cached as Array
+	if arrays[Mesh.ARRAY_VERTEX] == null:
+		_fail("source_arrays_cache: missing vertex array")

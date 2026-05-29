@@ -1,0 +1,9 @@
+[gd_resource type="ShaderMaterial" load_steps=2 format=3]
+
+[ext_resource type="Shader" path="res://addons/nexus_vertex_painter/shaders/vertex_color_preview_overlay.gdshader" id="1_overlay"]
+
+[resource]
+render_priority = 1
+shader = ExtResource("1_overlay")
+shader_parameter/overlay_strength = 0.55
+shader_parameter/normal_offset = 0.0008

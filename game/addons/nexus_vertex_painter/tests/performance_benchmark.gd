@@ -1,10 +1,11 @@
 extends Node
-## Performance benchmark: C++ GDExtension vs GDScript paint_surface.
+## Performance benchmark: paint_surface, prep_cache, and GPU sync paths.
 ## Launched by run_performance.gd (runs in _ready when engine is ready).
 
-const VERTEX_COUNTS := [5_000, 20_000, 50_000, 100_000]
+const VERTEX_COUNTS := [5_000, 20_000, 50_000]
 const WARMUP_RUNS := 1
 const BENCHMARK_RUNS := 3
+const STROKE_DABS := 50
 
 var _results: Array[Dictionary] = []
 
@@ -12,12 +13,16 @@ var _results: Array[Dictionary] = []
 func _ready() -> void:
 	print("=== Nexus Vertex Painter Performance Benchmark ===")
 	print("")
-	_run_benchmark()
+	_run_paint_surface_benchmark()
+	print("")
+	_run_prep_cache_benchmark()
+	print("")
+	_run_gpu_sync_benchmark()
 	print("")
 	_print_results()
 
 
-func _run_benchmark() -> void:
+func _run_paint_surface_benchmark() -> void:
 	var has_cpp := ClassDB.class_exists("VertexPainterCore")
 	var cpp_core = null
 	if has_cpp:
@@ -29,7 +34,7 @@ func _run_benchmark() -> void:
 	print("")
 
 	for vert_count in VERTEX_COUNTS:
-		print("  Benchmarking %d vertices..." % vert_count)
+		print("  paint_surface @ %d vertices..." % vert_count)
 		var positions := _create_positions(vert_count)
 		var normals := _create_normals(vert_count)
 		var colors := _create_colors(vert_count)
@@ -39,7 +44,7 @@ func _run_benchmark() -> void:
 		var brush_size := 1.0
 		var falloff := 0.5
 		var strength := 0.25
-		var mode := 0  # ADD
+		var mode := 0
 		var channels := Vector4(1, 1, 1, 1)
 		var brush_image: Image = null
 		var brush_angle := 0.0
@@ -53,9 +58,9 @@ func _run_benchmark() -> void:
 		var curv_sensitivity := 0.5
 		var curv_invert := false
 
-		var result := {"vertices": vert_count, "cpp_ms": 0.0, "gd_ms": 0.0}
+		var result := {"vertices": vert_count, "cpp_ms": 0.0, "gd_ms": 0.0, "prep_arrays_ms": 0.0,
+			"prep_mdt_ms": 0.0, "gpu_arrays_ms": 0.0, "gpu_attrib_ms": 0.0}
 
-		# --- C++ path ---
 		if has_cpp and cpp_core:
 			for r in range(WARMUP_RUNS):
 				var colors_copy := colors.duplicate()
@@ -64,7 +69,8 @@ func _run_benchmark() -> void:
 					radius_sq, brush_size, falloff, strength, mode, channels,
 					brush_image, brush_angle, brush_pos_global, mesh_transform,
 					neighbor_map, use_slope_mask, slope_angle_cos, slope_invert,
-					use_curv_mask, curv_sensitivity, curv_invert
+					use_curv_mask, curv_sensitivity, curv_invert,
+					false, Vector3.UP
 				)
 			var cpp_times: Array[float] = []
 			for r in range(BENCHMARK_RUNS):
@@ -75,14 +81,13 @@ func _run_benchmark() -> void:
 					radius_sq, brush_size, falloff, strength, mode, channels,
 					brush_image, brush_angle, brush_pos_global, mesh_transform,
 					neighbor_map, use_slope_mask, slope_angle_cos, slope_invert,
-					use_curv_mask, curv_sensitivity, curv_invert
+					use_curv_mask, curv_sensitivity, curv_invert,
+					false, Vector3.UP
 				)
-				var t1 := Time.get_ticks_usec()
-				cpp_times.append((t1 - t0) / 1000.0)
+				cpp_times.append((Time.get_ticks_usec() - t0) / 1000.0)
 			cpp_times.sort()
 			result["cpp_ms"] = cpp_times[BENCHMARK_RUNS / 2]
 
-		# --- GDScript path ---
 		for r in range(WARMUP_RUNS):
 			var colors_copy := colors.duplicate()
 			_paint_surface_gdscript(
@@ -97,12 +102,75 @@ func _run_benchmark() -> void:
 				positions, normals, colors_copy, local_hit,
 				radius_sq, brush_size, falloff, strength, channels
 			)
-			var t1 := Time.get_ticks_usec()
-			gd_times.append((t1 - t0) / 1000.0)
+			gd_times.append((Time.get_ticks_usec() - t0) / 1000.0)
 		gd_times.sort()
 		result["gd_ms"] = gd_times[BENCHMARK_RUNS / 2]
 
 		_results.append(result)
+
+
+func _run_prep_cache_benchmark() -> void:
+	print("prep_cache (20k verts, single surface):")
+	var mesh := _make_test_mesh(20_000)
+	var data := VertexColorData.new()
+
+	for r in range(WARMUP_RUNS):
+		data._prep_cache(mesh)
+
+	var t0 := Time.get_ticks_usec()
+	data._prep_cache(mesh)
+	var arrays_ms := (Time.get_ticks_usec() - t0) / 1000.0
+
+	if _results.size() > 0:
+		_results[1]["prep_arrays_ms"] = arrays_ms
+	print("  surface_get_arrays path: %.2f ms" % arrays_ms)
+
+
+func _run_gpu_sync_benchmark() -> void:
+	print("gpu sync (20k verts, %d dabs):" % STROKE_DABS)
+	var mesh := _make_test_mesh(20_000)
+	var data := _make_data_node_with_mesh(mesh)
+	data._cache_source_arrays(mesh)
+	data._detect_paint_sync_mode(mesh)
+	data.surface_data[0] = _create_colors(20_000)
+
+	for r in range(WARMUP_RUNS):
+		data._sync_colors_via_arrays_runtime_mesh()
+
+	var t0 := Time.get_ticks_usec()
+	for i in range(STROKE_DABS):
+		data.surface_data[0] = data.surface_data[0].duplicate()
+		data._sync_colors_via_arrays_runtime_mesh()
+	var arrays_ms := (Time.get_ticks_usec() - t0) / 1000.0 / float(STROKE_DABS)
+
+	if _results.size() > 0:
+		_results[1]["gpu_arrays_ms"] = arrays_ms
+	print("  arrays runtime sync / dab: %.2f ms" % arrays_ms)
+
+
+func _make_test_mesh(vertex_count: int) -> ArrayMesh:
+	var positions := _create_positions(vertex_count)
+	var normals := _create_normals(vertex_count)
+	var colors := _create_colors(vertex_count)
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = positions
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_COLOR] = colors
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return mesh
+
+
+func _make_data_node_with_mesh(mesh: ArrayMesh) -> VertexColorData:
+	var data := VertexColorData.new()
+	var parent := MeshInstance3D.new()
+	parent.mesh = mesh
+	parent.add_child(data)
+	data._source_mesh = mesh
+	data._runtime_mesh = mesh
+	data._prep_cache(mesh)
+	return data
 
 
 func _paint_surface_gdscript(
@@ -197,9 +265,13 @@ func _print_results() -> void:
 		])
 
 	if speedup_count > 0:
-		var avg := total_speedup / speedup_count
 		print("")
-		print("Average C++ speedup: %.1fx" % avg)
-	else:
+		print("Average C++ speedup: %.1fx" % (total_speedup / speedup_count))
+
+	if _results.size() > 1:
+		var mid: Dictionary = _results[1]
 		print("")
-		print("C++ extension not available - GDScript-only benchmark.")
+		print("GPU / cache (20k): prep_cache=%.2f ms, arrays_sync/dab=%.2f ms" % [
+			mid.get("prep_arrays_ms", 0.0),
+			mid.get("gpu_arrays_ms", 0.0)
+		])
