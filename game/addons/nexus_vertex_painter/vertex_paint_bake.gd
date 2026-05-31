@@ -36,11 +36,6 @@ func infer_original_mesh_path(mesh_instance: MeshInstance3D) -> String:
 		var scene_path: String = node.scene_file_path
 		if scene_path.ends_with(".gltf") or scene_path.ends_with(".glb"):
 			return infer_gltf_mesh_path(scene_path, gltf_lookup_name)
-		if node.name == "BigMesh_VP_TEST":
-			return infer_gltf_mesh_path(
-					"res://props/assets/big_mesh/BigMesh_VP_TEST.gltf",
-					gltf_lookup_name
-			)
 		node = node.get_parent()
 	return ""
 
@@ -132,7 +127,6 @@ static func is_preview_vertex_color_material(mat: Material, preview_paths: Dicti
 	var path: String = mat.resource_path
 	return path == preview_paths.vertex_color \
 			or path == preview_paths.overlay \
-			or path == preview_paths.standard_vc \
 			or path.ends_with("check_vertex_color.tres") \
 			or path.ends_with("vertex_color_preview_overlay.tres") \
 			or path.ends_with("new_standard_material_3d.tres")

@@ -3,14 +3,12 @@ extends RefCounted
 
 const PREVIEW_VERTEX_COLOR_MATERIAL := "res://addons/nexus_vertex_painter/check_vertex_color.tres"
 const PREVIEW_VERTEX_COLOR_OVERLAY_MATERIAL := "res://addons/nexus_vertex_painter/vertex_color_preview_overlay.tres"
-const PREVIEW_STANDARD_VC_MATERIAL := "res://props/assets/new_standard_material_3d.tres"
 
 
 func get_preview_material_paths() -> Dictionary:
 	return {
 		"vertex_color": PREVIEW_VERTEX_COLOR_MATERIAL,
 		"overlay": PREVIEW_VERTEX_COLOR_OVERLAY_MATERIAL,
-		"standard_vc": PREVIEW_STANDARD_VC_MATERIAL,
 	}
 
 
