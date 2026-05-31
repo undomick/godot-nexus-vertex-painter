@@ -13,6 +13,7 @@ signal revert_requested()
 signal show_vertex_colors_toggled(pressed: bool)
 signal export_snapshot_requested()
 signal transfer_snapshot_requested()
+signal combine_meshes_requested()
 
 # --- UI REFERENCES (Unique Names) ---
 
@@ -84,6 +85,7 @@ const PROJECTION_FRONT_ONLY := 1
 @onready var btn_bake: Button = %Bake_Button
 @onready var btn_bake_scene: Button = %BakeScene_Button
 @onready var btn_revert: Button = %Revert_Button
+@onready var btn_combine_meshes: Button = %CombineMeshes_Button
 
 # Internal State
 # 0 = Add, 1 = Subtract, 2 = Set, 3 = Blur, 4 = Sharpen
@@ -189,6 +191,8 @@ func _ready() -> void:
 		btn_export_snapshot.pressed.connect(_on_export_snapshot_pressed)
 	if btn_transfer_snapshot and not btn_transfer_snapshot.pressed.is_connected(_on_transfer_snapshot_pressed):
 		btn_transfer_snapshot.pressed.connect(_on_transfer_snapshot_pressed)
+	if btn_combine_meshes and not btn_combine_meshes.pressed.is_connected(_on_combine_meshes_pressed):
+		btn_combine_meshes.pressed.connect(_on_combine_meshes_pressed)
 	
 	_update_all_button_visuals()
 	_update_mask_ui_state()
@@ -224,6 +228,11 @@ func set_selection_empty(empty: bool) -> void:
 		get_node("EmptySelectionLabel").visible = empty
 
 
+func set_combine_meshes_enabled(enabled: bool) -> void:
+	if btn_combine_meshes:
+		btn_combine_meshes.disabled = not enabled
+
+
 func _setup_tooltips() -> void:
 	if btn_r: btn_r.tooltip_text = "Toggle Red channel (1)"
 	if btn_g: btn_g.tooltip_text = "Toggle Green channel (2)"
@@ -243,6 +252,8 @@ func _setup_tooltips() -> void:
 	if btn_bake: btn_bake.tooltip_text = "Bake vertex colors into mesh file"
 	if btn_bake_scene: btn_bake_scene.tooltip_text = "Bake vertex colors into the ancestor scene file"
 	if btn_revert: btn_revert.tooltip_text = "Revert to original mesh (irreversible)"
+	if btn_combine_meshes:
+		btn_combine_meshes.tooltip_text = "Merge 2+ selected MeshInstance3D nodes into one centered ArrayMesh (keeps painted vertex colors)"
 	if btn_show_vertex_colors:
 		btn_show_vertex_colors.tooltip_text = "Blend painted vertex colors over the mesh materials (does not replace shaders)"
 	if vc_preview_strength_slider:
@@ -390,6 +401,10 @@ func _on_export_snapshot_pressed():
 
 func _on_transfer_snapshot_pressed():
 	emit_signal("transfer_snapshot_requested")
+
+
+func _on_combine_meshes_pressed():
+	emit_signal("combine_meshes_requested")
 
 
 func _on_show_vertex_colors_toggled(_pressed: bool) -> void:

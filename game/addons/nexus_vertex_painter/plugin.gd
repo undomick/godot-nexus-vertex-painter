@@ -48,6 +48,7 @@ var _stroke := VertexPaintStroke.new()
 var _input := VertexPaint3DInput.new()
 var _preview := VertexPaintPreview.new()
 var _bake := VertexPaintBake.new()
+var _mesh_combine := VertexPaintMeshCombine.new()
 
 
 func _enter_tree():
@@ -73,6 +74,7 @@ func _enter_tree():
 	dock_instance.revert_requested.connect(_on_revert_requested)
 	dock_instance.export_snapshot_requested.connect(_on_export_snapshot_requested)
 	dock_instance.transfer_snapshot_requested.connect(_on_transfer_snapshot_requested)
+	dock_instance.combine_meshes_requested.connect(_on_combine_meshes_requested)
 	dock_instance.show_vertex_colors_toggled.connect(_on_show_vertex_colors_toggled)
 	dock_instance.set_ui_active(false)
 
@@ -198,11 +200,13 @@ func _on_mode_toggled(pressed: bool):
 		is_painting = false
 		is_adjusting_brush = false
 		dock_instance.set_selection_empty(false)
+		_update_combine_button_state()
 	else:
 		dock.make_visible()
 		_colliders.refresh_selection_and_colliders(self, _preview)
 		_update_brush_image_cache()
 		dock_instance.set_selection_empty(selected_meshes.is_empty())
+		_update_combine_button_state()
 
 
 func _handles(object):
@@ -220,6 +224,7 @@ func _edit(_object):
 
 func _on_selection_changed():
 	_colliders.on_selection_changed(self, _preview)
+	_update_combine_button_state()
 
 
 func _forward_3d_gui_input(camera: Camera3D, event: InputEvent) -> int:
@@ -422,3 +427,74 @@ func _assign_scene_owner(node: Node, scene_root: Node) -> void:
 func _finish_snapshot_transfer(colliders: VertexPaintColliders, preview: VertexPaintPreview) -> void:
 	_preview.refresh_vertex_color_preview(self, colliders, selected_meshes)
 	_colliders.refresh_selection_and_colliders(self, preview)
+
+
+func _update_combine_button_state() -> void:
+	if not dock_instance:
+		return
+	var selection := get_editor_interface().get_selection().get_selected_nodes()
+	var combinable := _mesh_combine.count_combinable_mesh_instances(selection)
+	var enabled := paint_mode_active and combinable >= 2
+	dock_instance.set_combine_meshes_enabled(enabled)
+
+
+func _on_combine_meshes_requested() -> void:
+	var selection := get_editor_interface().get_selection().get_selected_nodes()
+	var mesh_instances: Array[MeshInstance3D] = []
+	for node in selection:
+		if _mesh_combine.is_combinable_mesh_instance(node):
+			mesh_instances.append(node)
+
+	if mesh_instances.size() < 2:
+		VertexPainterLog.warn("Select at least two MeshInstance3D nodes with ArrayMesh to combine.")
+		return
+
+	var combine_result: Dictionary = _mesh_combine.combine_mesh_instances(mesh_instances)
+	var combined_mesh: ArrayMesh = combine_result.get("mesh")
+	if combined_mesh == null or combined_mesh.get_surface_count() == 0:
+		VertexPainterLog.error("Combine failed: no mesh surfaces were built.")
+		return
+
+	var scene_root := get_editor_interface().get_edited_scene_root()
+	if not scene_root:
+		VertexPainterLog.error("No edited scene root.")
+		return
+
+	var insert_parent := _mesh_combine.resolve_insert_parent(mesh_instances, scene_root)
+	var combined_node := MeshInstance3D.new()
+	combined_node.mesh = combined_mesh
+	combined_node.name = _mesh_combine.unique_combined_name(insert_parent)
+	var world_pivot: Vector3 = combine_result.get("world_pivot", Vector3.ZERO)
+
+	var ur := get_undo_redo()
+	ur.create_action("Combine Meshes")
+	ur.add_do_method(self, "_undo_add_combined_mesh", combined_node, insert_parent, scene_root, world_pivot)
+	ur.add_undo_method(self, "_undo_remove_combined_mesh", combined_node, insert_parent)
+	ur.commit_action()
+
+	get_editor_interface().get_selection().clear()
+	get_editor_interface().get_selection().add_node(combined_node)
+	VertexPainterLog.info("Combined %d meshes into '%s'." % [mesh_instances.size(), combined_node.name])
+
+
+func _undo_add_combined_mesh(
+		combined_node: MeshInstance3D,
+		insert_parent: Node,
+		scene_root: Node,
+		world_pivot: Vector3) -> void:
+	if not is_instance_valid(combined_node) or not is_instance_valid(insert_parent):
+		return
+	if combined_node.get_parent():
+		return
+	insert_parent.add_child(combined_node, true)
+	combined_node.global_transform = Transform3D(Basis.IDENTITY, world_pivot)
+	_assign_scene_owner(combined_node, scene_root)
+	get_editor_interface().edit_node(combined_node)
+
+
+func _undo_remove_combined_mesh(combined_node: MeshInstance3D, insert_parent: Node) -> void:
+	if not is_instance_valid(combined_node):
+		return
+	if combined_node.get_parent() == insert_parent:
+		insert_parent.remove_child(combined_node)
+	combined_node.queue_free()

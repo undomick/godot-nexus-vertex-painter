@@ -584,26 +584,37 @@ layout_mode = 2
 script = ExtResource("2_gpvri")
 title = "Production"
 
-[node name="HBoxContainer" type="HBoxContainer" parent="ProductionContainer" unique_id=1320787825]
+[node name="ProductionGrid" type="GridContainer" parent="ProductionContainer" unique_id=1320787825]
 layout_mode = 2
+theme_override_constants/h_separation = 4
+theme_override_constants/v_separation = 4
+columns = 2
 
-[node name="Bake_Button" type="Button" parent="ProductionContainer/HBoxContainer" unique_id=304998997]
+[node name="Bake_Button" type="Button" parent="ProductionContainer/ProductionGrid" unique_id=304998997]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 tooltip_text = "Bake vertex colors into mesh file"
 text = "Bake to Mesh"
 
-[node name="BakeScene_Button" type="Button" parent="ProductionContainer/HBoxContainer" unique_id=1035290683]
+[node name="BakeScene_Button" type="Button" parent="ProductionContainer/ProductionGrid" unique_id=1035290683]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 tooltip_text = "Bake vertex colors into the ancestor scene file"
 text = "Bake to Scene"
 
-[node name="Revert_Button" type="Button" parent="ProductionContainer/HBoxContainer" unique_id=160102517]
+[node name="Revert_Button" type="Button" parent="ProductionContainer/ProductionGrid" unique_id=160102517]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 tooltip_text = "Revert to original mesh (irreversible)"
 text = "Revert to Original"
+
+[node name="CombineMeshes_Button" type="Button" parent="ProductionContainer/ProductionGrid" unique_id=2847193052]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+disabled = true
+tooltip_text = "Merge selected MeshInstance3D nodes into one ArrayMesh (world-space, centered origin)"
+text = "Combine Meshes"

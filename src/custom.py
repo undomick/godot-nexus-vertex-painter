@@ -1,3 +1,2 @@
 # Custom build options for nexus_vertex_painter GDExtension.
-# Add project-specific SCons variables here if needed.
-# The godot-cpp build uses target=editor for editor plugins.
+# Version/author are set via ADDON_VERSION / ADDON_AUTHOR env vars or SConstruct defaults.

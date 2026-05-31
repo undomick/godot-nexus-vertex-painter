@@ -69,6 +69,8 @@ func on_selection_changed(plugin: EditorPlugin, preview: VertexPaintPreview) -> 
 		preview.update_shader_debug_view(plugin)
 		preview.update_smart_mask_preview(plugin, self)
 		plugin.dock_instance.set_selection_empty(plugin.selected_meshes.is_empty())
+		if plugin.has_method("_update_combine_button_state"):
+			plugin._update_combine_button_state()
 
 
 func clear_all_locks(plugin: EditorPlugin) -> void:
