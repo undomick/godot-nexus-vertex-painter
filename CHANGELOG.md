@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.0] - 2026-07-18
+
+### Fixed
+
+- **Godot 4.7 bottom bar**: Enabling the plugin no longer pushes the editor bottom bar (Output / Debugger / version) off-screen. The painter dock is now a `ScrollContainer` so the right dock slot keeps a small minimum height under Godot 4.7's `use_hidden_tabs_for_min_size` layout.
+
+### Changed
+
+- Editor dock registration sets an explicit `layout_key` and `available_layouts` (vertical + floating).
+
+---
+
 ## [2.2.0] - 2026-05-31
 
 ### Added

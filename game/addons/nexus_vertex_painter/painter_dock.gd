@@ -1,5 +1,5 @@
 @tool
-extends VBoxContainer
+extends ScrollContainer
 
 # --- SIGNALS ---
 signal settings_changed
@@ -91,6 +91,8 @@ const PROJECTION_FRONT_ONLY := 1
 # 0 = Add, 1 = Subtract, 2 = Set, 3 = Blur, 4 = Sharpen
 var _brush_mode: int = 0
 var brush_angle: float = 0.0
+
+@onready var _content: VBoxContainer = $Content
 
 
 func _ready() -> void:
@@ -208,9 +210,9 @@ func _setup_empty_selection_label() -> void:
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.add_theme_font_size_override("font_size", 12)
 	label.modulate = Color(0.7, 0.7, 0.7, 0.9)
-	add_child(label)
+	_content.add_child(label)
 	if label.get_index() != 0:
-		move_child(label, 0)
+		_content.move_child(label, 0)
 	label.visible = false
 
 
@@ -224,8 +226,9 @@ func set_ui_active(active: bool):
 
 
 func set_selection_empty(empty: bool) -> void:
-	if has_node("EmptySelectionLabel"):
-		get_node("EmptySelectionLabel").visible = empty
+	var label := _content.get_node_or_null("EmptySelectionLabel") if _content else null
+	if label:
+		label.visible = empty
 
 
 func set_combine_meshes_enabled(enabled: bool) -> void:

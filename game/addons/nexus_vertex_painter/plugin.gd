@@ -54,7 +54,9 @@ var _mesh_combine := VertexPaintMeshCombine.new()
 func _enter_tree():
 	dock = EditorDock.new()
 	dock.title = "Vertex Painter"
+	dock.layout_key = "nexus_vertex_painter"
 	dock.default_slot = EditorDock.DOCK_SLOT_RIGHT_UL
+	dock.available_layouts = EditorDock.DOCK_LAYOUT_VERTICAL | EditorDock.DOCK_LAYOUT_FLOATING
 
 	var editor_base = get_editor_interface().get_base_control()
 	if editor_base.has_theme_icon("Edit", "EditorIcons"):

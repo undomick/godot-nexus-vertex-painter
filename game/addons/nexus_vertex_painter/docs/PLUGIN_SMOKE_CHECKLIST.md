@@ -19,11 +19,12 @@ godot --path . --headless --script res://addons/nexus_vertex_painter/tests/run_p
 
 ## Manual (editor)
 
-1. Enable **Vertex Paint** on a `MeshInstance3D` (colliders appear).
-2. Paint stroke; **Undo** / **Redo** updates the viewport immediately.
-3. **Show vertex colors** on/off; adjust **VC overlay** strength.
-4. **Preview Smart Mask** with slope/curvature masks.
-5. **Fill** / **Clear** / **Procedural** tools.
-6. **Bake** (`.res`), **Bake to Scene**, **Revert**.
-7. **Export Paint Snapshot** (save dialog, `.tres` with point count in Output) / **Transfer from Snapshot** (see [VERTEX_COLOR_TRANSFER.md](VERTEX_COLOR_TRANSFER.md)).
-8. **Revert** only restores meshes that have `_vertex_paint_original_path` (not the snapshot workflow).
+1. After enabling the plugin, the editor **bottom bar** (Output / Debugger / version) stays visible (Godot 4.7+).
+2. Enable **Vertex Paint** on a `MeshInstance3D` (colliders appear); dock content scrolls if tall.
+3. Paint stroke; **Undo** / **Redo** updates the viewport immediately.
+4. **Show vertex colors** on/off; adjust **VC overlay** strength.
+5. **Preview Smart Mask** with slope/curvature masks.
+6. **Fill** / **Clear** / **Procedural** tools.
+7. **Bake** (`.res`), **Bake to Scene**, **Revert**.
+8. **Export Paint Snapshot** (save dialog, `.tres` with point count in Output) / **Transfer from Snapshot** (see [VERTEX_COLOR_TRANSFER.md](VERTEX_COLOR_TRANSFER.md)).
+9. **Revert** only restores meshes that have `_vertex_paint_original_path` (not the snapshot workflow).

@@ -75,11 +75,11 @@ Release version and author are defined in `vertex_painter_constants.h` (defaults
 
 ```bash
 # Windows PowerShell
-$env:ADDON_VERSION="2.2.0"; $env:ADDON_AUTHOR="Michael Kulzer"
+$env:ADDON_VERSION="2.3.0"; $env:ADDON_AUTHOR="Michael Kulzer"
 scons platform=windows target=editor arch=x86_64
 
 # Linux / macOS
-ADDON_VERSION=2.2.0 ADDON_AUTHOR="Michael Kulzer" scons platform=linux target=editor arch=x86_64
+ADDON_VERSION=2.3.0 ADDON_AUTHOR="Michael Kulzer" scons platform=linux target=editor arch=x86_64
 ```
 
 Keep in sync with `game/addons/nexus_vertex_painter/plugin.cfg` when bumping releases.

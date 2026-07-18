@@ -1,291 +1,291 @@
-name: Build GDExtension
-
-on:
-  push:
-    branches: [main, master]
-  pull_request:
-  workflow_dispatch:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-env:
-  GODOT_VERSION: "4.6"
-  ADDON_VERSION: "2.2.0"
-  ADDON_AUTHOR: "Michael Kulzer"
-
-jobs:
-  changes:
-    name: Check changes
-    runs-on: ubuntu-latest
-    outputs:
-      src: ${{ steps.result.outputs.src }}
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 2
-
-      - uses: dorny/paths-filter@v4
-        id: filter
-        if: github.event_name != 'workflow_dispatch'
-        with:
-          filters: |
-            src:
-              - 'src/**'
-              - 'game/addons/nexus_vertex_painter/**'
-              - '.github/**'
-
-      - id: result
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "src=true" >> $GITHUB_OUTPUT
-          else
-            echo "src=${{ steps.filter.outputs.src }}" >> $GITHUB_OUTPUT
-          fi
-
-  # godot-cpp once per host OS; Linux + Windows share ubuntu artifacts.
-  godot-cpp-linux-windows:
-    name: godot-cpp (Linux + Windows)
-    needs: changes
-    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.src == 'true'
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          submodules: recursive
-
-      - uses: ./.github/actions/setup-godot-cpp
-
-      - name: Cache godot-cpp build (linux + windows)
-        uses: actions/cache@v5
-        id: cache-godot-cpp
-        with:
-          path: |
-            .scons-cache
-            src/godot-cpp/bin
-            src/godot-cpp/gen
-          key: godot-cpp-ubuntu-lw-${{ hashFiles('src/godot-cpp/SConstruct', 'src/godot-cpp/tools/**', 'src/godot-cpp/gdextension/**') }}
-          restore-keys: |
-            godot-cpp-ubuntu-lw-
-
-      - name: Install mingw64
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y mingw-w64
-          sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix || true
-          sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix || true
-
-      - name: Install Python & SCons
-        run: |
-          python3 -m pip install scons
-          scons --version
-
-      - name: Build godot-cpp (Linux)
-        env:
-          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
-        run: bash .github/scripts/build_godot_cpp.sh linux
-
-      - name: Build godot-cpp (Windows)
-        env:
-          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
-        run: bash .github/scripts/build_godot_cpp.sh windows
-
-      - name: Upload godot-cpp (linux + windows)
-        uses: actions/upload-artifact@v4
-        with:
-          name: godot-cpp-linux-windows
-          path: |
-            src/godot-cpp/bin
-            src/godot-cpp/gen
-          retention-days: 7
-
-  godot-cpp-macos:
-    name: godot-cpp (macOS)
-    needs: changes
-    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.src == 'true'
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          submodules: recursive
-
-      - uses: ./.github/actions/setup-godot-cpp
-
-      - name: Cache godot-cpp build (macOS)
-        uses: actions/cache@v5
-        with:
-          path: |
-            .scons-cache
-            src/godot-cpp/bin
-            src/godot-cpp/gen
-          key: godot-cpp-macos-${{ hashFiles('src/godot-cpp/SConstruct', 'src/godot-cpp/tools/**', 'src/godot-cpp/gdextension/**') }}
-          restore-keys: |
-            godot-cpp-macos-
-
-      - name: Install SCons
-        run: |
-          python3 -m pip install --break-system-packages scons
-          scons --version
-
-      - name: Build godot-cpp (macOS)
-        env:
-          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
-        run: bash .github/scripts/build_godot_cpp.sh macos
-
-      - name: Upload godot-cpp (macOS)
-        uses: actions/upload-artifact@v4
-        with:
-          name: godot-cpp-macos
-          path: |
-            src/godot-cpp/bin
-            src/godot-cpp/gen
-          retention-days: 7
-
-  build-linux:
-    name: Linux
-    needs: [changes, godot-cpp-linux-windows]
-    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.src == 'true'
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: ./.github/actions/setup-godot-cpp
-
-      - name: Download godot-cpp (linux + windows)
-        uses: actions/download-artifact@v4
-        with:
-          name: godot-cpp-linux-windows
-          path: src/godot-cpp
-
-      - name: Add GCC problem matcher
-        run: echo "::add-matcher::${{ github.workspace }}/.github/gcc-problem-matcher.json"
-
-      - name: Cache extension build
-        uses: actions/cache@v5
-        with:
-          path: .scons-cache
-          key: ext-linux-${{ hashFiles('src/SConstruct', 'src/vertex_painter_core.cpp', 'src/vertex_painter_core.h', 'src/vertex_painter_constants.h') }}
-          restore-keys: |
-            ext-linux-
-
-      - name: Install Python & SCons
-        run: |
-          sudo apt-get update
-          python3 -m pip install scons
-
-      - name: Build extension (linux)
-        env:
-          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
-          ADDON_VERSION: ${{ env.ADDON_VERSION }}
-          ADDON_AUTHOR: ${{ env.ADDON_AUTHOR }}
-        run: bash .github/scripts/build_extension.sh linux
-
-      - name: Verify Linux binaries
-        run: bash .github/scripts/verify_binaries.sh game/addons/nexus_vertex_painter/bin linux
-
-      - name: Upload Linux artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-editor-x86_64
-          path: game/addons/nexus_vertex_painter/bin/linux/
-
-  build-windows:
-    name: Windows
-    needs: [changes, godot-cpp-linux-windows]
-    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.src == 'true'
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: ./.github/actions/setup-godot-cpp
-
-      - name: Download godot-cpp (linux + windows)
-        uses: actions/download-artifact@v4
-        with:
-          name: godot-cpp-linux-windows
-          path: src/godot-cpp
-
-      - name: Add GCC problem matcher
-        run: echo "::add-matcher::${{ github.workspace }}/.github/gcc-problem-matcher.json"
-
-      - name: Cache extension build
-        uses: actions/cache@v5
-        with:
-          path: .scons-cache
-          key: ext-windows-${{ hashFiles('src/SConstruct', 'src/vertex_painter_core.cpp', 'src/vertex_painter_core.h', 'src/vertex_painter_constants.h') }}
-          restore-keys: |
-            ext-windows-
-
-      - name: Install mingw64
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y mingw-w64
-          sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix || true
-          sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix || true
-
-      - name: Install Python & SCons
-        run: python3 -m pip install scons
-
-      - name: Build extension (windows)
-        env:
-          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
-          ADDON_VERSION: ${{ env.ADDON_VERSION }}
-          ADDON_AUTHOR: ${{ env.ADDON_AUTHOR }}
-        run: bash .github/scripts/build_extension.sh windows
-
-      - name: Verify Windows binaries
-        run: bash .github/scripts/verify_binaries.sh game/addons/nexus_vertex_painter/bin windows
-
-      - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-editor-x86_64
-          path: game/addons/nexus_vertex_painter/bin/windows/
-
-  build-macos:
-    name: macOS
-    needs: [changes, godot-cpp-macos]
-    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.src == 'true'
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: ./.github/actions/setup-godot-cpp
-
-      - name: Download godot-cpp (macOS)
-        uses: actions/download-artifact@v4
-        with:
-          name: godot-cpp-macos
-          path: src/godot-cpp
-
-      - name: Add GCC problem matcher
-        run: echo "::add-matcher::${{ github.workspace }}/.github/gcc-problem-matcher.json"
-
-      - name: Cache extension build
-        uses: actions/cache@v5
-        with:
-          path: .scons-cache
-          key: ext-macos-${{ hashFiles('src/SConstruct', 'src/vertex_painter_core.cpp', 'src/vertex_painter_core.h', 'src/vertex_painter_constants.h') }}
-          restore-keys: |
-            ext-macos-
-
-      - name: Install SCons
-        run: python3 -m pip install --break-system-packages scons
-
-      - name: Build extension (macOS)
-        env:
-          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
-          ADDON_VERSION: ${{ env.ADDON_VERSION }}
-          ADDON_AUTHOR: ${{ env.ADDON_AUTHOR }}
-        run: bash .github/scripts/build_extension.sh macos
-
-      - name: Verify macOS binaries
-        run: bash .github/scripts/verify_binaries.sh game/addons/nexus_vertex_painter/bin macos
-
-      - name: Upload macOS artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: macos-editor-universal
-          path: game/addons/nexus_vertex_painter/bin/macos/
+name: Build GDExtension
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: "4.6"
+  ADDON_VERSION: "2.3.0"
+  ADDON_AUTHOR: "Michael Kulzer"
+
+jobs:
+  changes:
+    name: Check changes
+    runs-on: ubuntu-latest
+    outputs:
+      src: ${{ steps.result.outputs.src }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+
+      - uses: dorny/paths-filter@v4
+        id: filter
+        if: github.event_name != 'workflow_dispatch'
+        with:
+          filters: |
+            src:
+              - 'src/**'
+              - 'game/addons/nexus_vertex_painter/**'
+              - '.github/**'
+
+      - id: result
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "src=true" >> $GITHUB_OUTPUT
+          else
+            echo "src=${{ steps.filter.outputs.src }}" >> $GITHUB_OUTPUT
+          fi
+
+  # godot-cpp once per host OS; Linux + Windows share ubuntu artifacts.
+  godot-cpp-linux-windows:
+    name: godot-cpp (Linux + Windows)
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.src == 'true'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-godot-cpp
+
+      - name: Cache godot-cpp build (linux + windows)
+        uses: actions/cache@v5
+        id: cache-godot-cpp
+        with:
+          path: |
+            .scons-cache
+            src/godot-cpp/bin
+            src/godot-cpp/gen
+          key: godot-cpp-ubuntu-lw-${{ hashFiles('src/godot-cpp/SConstruct', 'src/godot-cpp/tools/**', 'src/godot-cpp/gdextension/**') }}
+          restore-keys: |
+            godot-cpp-ubuntu-lw-
+
+      - name: Install mingw64
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64
+          sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix || true
+          sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix || true
+
+      - name: Install Python & SCons
+        run: |
+          python3 -m pip install scons
+          scons --version
+
+      - name: Build godot-cpp (Linux)
+        env:
+          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
+        run: bash .github/scripts/build_godot_cpp.sh linux
+
+      - name: Build godot-cpp (Windows)
+        env:
+          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
+        run: bash .github/scripts/build_godot_cpp.sh windows
+
+      - name: Upload godot-cpp (linux + windows)
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-cpp-linux-windows
+          path: |
+            src/godot-cpp/bin
+            src/godot-cpp/gen
+          retention-days: 7
+
+  godot-cpp-macos:
+    name: godot-cpp (macOS)
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.src == 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/setup-godot-cpp
+
+      - name: Cache godot-cpp build (macOS)
+        uses: actions/cache@v5
+        with:
+          path: |
+            .scons-cache
+            src/godot-cpp/bin
+            src/godot-cpp/gen
+          key: godot-cpp-macos-${{ hashFiles('src/godot-cpp/SConstruct', 'src/godot-cpp/tools/**', 'src/godot-cpp/gdextension/**') }}
+          restore-keys: |
+            godot-cpp-macos-
+
+      - name: Install SCons
+        run: |
+          python3 -m pip install --break-system-packages scons
+          scons --version
+
+      - name: Build godot-cpp (macOS)
+        env:
+          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
+        run: bash .github/scripts/build_godot_cpp.sh macos
+
+      - name: Upload godot-cpp (macOS)
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-cpp-macos
+          path: |
+            src/godot-cpp/bin
+            src/godot-cpp/gen
+          retention-days: 7
+
+  build-linux:
+    name: Linux
+    needs: [changes, godot-cpp-linux-windows]
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.src == 'true'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ./.github/actions/setup-godot-cpp
+
+      - name: Download godot-cpp (linux + windows)
+        uses: actions/download-artifact@v4
+        with:
+          name: godot-cpp-linux-windows
+          path: src/godot-cpp
+
+      - name: Add GCC problem matcher
+        run: echo "::add-matcher::${{ github.workspace }}/.github/gcc-problem-matcher.json"
+
+      - name: Cache extension build
+        uses: actions/cache@v5
+        with:
+          path: .scons-cache
+          key: ext-linux-${{ hashFiles('src/SConstruct', 'src/vertex_painter_core.cpp', 'src/vertex_painter_core.h', 'src/vertex_painter_constants.h') }}
+          restore-keys: |
+            ext-linux-
+
+      - name: Install Python & SCons
+        run: |
+          sudo apt-get update
+          python3 -m pip install scons
+
+      - name: Build extension (linux)
+        env:
+          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
+          ADDON_VERSION: ${{ env.ADDON_VERSION }}
+          ADDON_AUTHOR: ${{ env.ADDON_AUTHOR }}
+        run: bash .github/scripts/build_extension.sh linux
+
+      - name: Verify Linux binaries
+        run: bash .github/scripts/verify_binaries.sh game/addons/nexus_vertex_painter/bin linux
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-editor-x86_64
+          path: game/addons/nexus_vertex_painter/bin/linux/
+
+  build-windows:
+    name: Windows
+    needs: [changes, godot-cpp-linux-windows]
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.src == 'true'
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ./.github/actions/setup-godot-cpp
+
+      - name: Download godot-cpp (linux + windows)
+        uses: actions/download-artifact@v4
+        with:
+          name: godot-cpp-linux-windows
+          path: src/godot-cpp
+
+      - name: Add GCC problem matcher
+        run: echo "::add-matcher::${{ github.workspace }}/.github/gcc-problem-matcher.json"
+
+      - name: Cache extension build
+        uses: actions/cache@v5
+        with:
+          path: .scons-cache
+          key: ext-windows-${{ hashFiles('src/SConstruct', 'src/vertex_painter_core.cpp', 'src/vertex_painter_core.h', 'src/vertex_painter_constants.h') }}
+          restore-keys: |
+            ext-windows-
+
+      - name: Install mingw64
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mingw-w64
+          sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix || true
+          sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix || true
+
+      - name: Install Python & SCons
+        run: python3 -m pip install scons
+
+      - name: Build extension (windows)
+        env:
+          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
+          ADDON_VERSION: ${{ env.ADDON_VERSION }}
+          ADDON_AUTHOR: ${{ env.ADDON_AUTHOR }}
+        run: bash .github/scripts/build_extension.sh windows
+
+      - name: Verify Windows binaries
+        run: bash .github/scripts/verify_binaries.sh game/addons/nexus_vertex_painter/bin windows
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-editor-x86_64
+          path: game/addons/nexus_vertex_painter/bin/windows/
+
+  build-macos:
+    name: macOS
+    needs: [changes, godot-cpp-macos]
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.src == 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ./.github/actions/setup-godot-cpp
+
+      - name: Download godot-cpp (macOS)
+        uses: actions/download-artifact@v4
+        with:
+          name: godot-cpp-macos
+          path: src/godot-cpp
+
+      - name: Add GCC problem matcher
+        run: echo "::add-matcher::${{ github.workspace }}/.github/gcc-problem-matcher.json"
+
+      - name: Cache extension build
+        uses: actions/cache@v5
+        with:
+          path: .scons-cache
+          key: ext-macos-${{ hashFiles('src/SConstruct', 'src/vertex_painter_core.cpp', 'src/vertex_painter_core.h', 'src/vertex_painter_constants.h') }}
+          restore-keys: |
+            ext-macos-
+
+      - name: Install SCons
+        run: python3 -m pip install --break-system-packages scons
+
+      - name: Build extension (macOS)
+        env:
+          SCONS_CACHE: ${{ github.workspace }}/.scons-cache
+          ADDON_VERSION: ${{ env.ADDON_VERSION }}
+          ADDON_AUTHOR: ${{ env.ADDON_AUTHOR }}
+        run: bash .github/scripts/build_extension.sh macos
+
+      - name: Verify macOS binaries
+        run: bash .github/scripts/verify_binaries.sh game/addons/nexus_vertex_painter/bin macos
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-editor-universal
+          path: game/addons/nexus_vertex_painter/bin/macos/
 

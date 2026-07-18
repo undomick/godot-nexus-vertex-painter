@@ -18,7 +18,7 @@ customs = [os.path.abspath(path) for path in customs]
 opts = Variables(customs, ARGUMENTS)
 opts.Update(localEnv)
 
-addon_version = os.environ.get("ADDON_VERSION", "2.2.0")
+addon_version = os.environ.get("ADDON_VERSION", "2.3.0")
 addon_author = os.environ.get("ADDON_AUTHOR", "Michael Kulzer")
 
 Help(opts.GenerateHelpText(localEnv))
