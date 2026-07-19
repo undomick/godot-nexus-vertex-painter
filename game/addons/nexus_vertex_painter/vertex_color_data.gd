@@ -26,11 +26,31 @@ var _paint_core_ref: RefCounted = null
 var _attrib_upload_cache: Dictionary = {} # { surface_idx: PackedByteArray }
 var _color_mesh_normalized: bool = false
 var _paint_sync_mode: int = 0
+## Surfaces whose CUSTOM color channel was migrated to ARRAY_COLOR (strip only that slot).
+var _normalized_color_custom_slot: Dictionary = {} # { surface_idx: Mesh.ARRAY_CUSTOM* }
 
 const DATA_VERSION = 2
 const SYNC_ARRAYS := 0
 const SYNC_ATTRIBUTE := 1
 const MESH_BUILD_FLAGS = Mesh.ARRAY_FLAG_USE_DYNAMIC_UPDATE
+const _CUSTOM_ARRAY_SLOTS: Array[int] = [
+	Mesh.ARRAY_CUSTOM0,
+	Mesh.ARRAY_CUSTOM1,
+	Mesh.ARRAY_CUSTOM2,
+	Mesh.ARRAY_CUSTOM3,
+]
+const _CUSTOM_FORMAT_PRESENCE: Array[int] = [
+	Mesh.ARRAY_FORMAT_CUSTOM0,
+	Mesh.ARRAY_FORMAT_CUSTOM1,
+	Mesh.ARRAY_FORMAT_CUSTOM2,
+	Mesh.ARRAY_FORMAT_CUSTOM3,
+]
+const _CUSTOM_FORMAT_SHIFTS: Array[int] = [
+	Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT,
+	Mesh.ARRAY_FORMAT_CUSTOM1_SHIFT,
+	Mesh.ARRAY_FORMAT_CUSTOM2_SHIFT,
+	Mesh.ARRAY_FORMAT_CUSTOM3_SHIFT,
+]
 
 func _ready():
 	request_ready()
@@ -47,6 +67,7 @@ func _enter_tree():
 		_cached_mesh = null
 		_attrib_upload_cache.clear()
 		_color_mesh_normalized = false
+		_normalized_color_custom_slot.clear()
 	_neighbor_cache.clear() # Topology-dependent, cheap to rebuild
 
 	var parent_mesh: Mesh = parent.mesh if parent else null
@@ -345,6 +366,7 @@ func ensure_paintable_color_mesh() -> bool:
 		return false
 
 	_import_mesh_colors_to_surface_data(mesh)
+	_record_normalized_color_custom_slots(mesh)
 
 	_attrib_upload_cache.clear()
 	if not _prepare_rebuild_from_parent(parent):
@@ -667,7 +689,7 @@ func _sync_colors_via_arrays_runtime_mesh() -> void:
 		if not cached is Array:
 			continue
 		var arrays: Array = (cached as Array).duplicate(true)
-		_strip_custom_arrays_for_paint(arrays)
+		_strip_migrated_color_custom(arrays, surf_idx)
 		var verts: Variant = arrays[Mesh.ARRAY_VERTEX]
 		if verts == null or not verts is PackedVector3Array:
 			continue
@@ -681,10 +703,9 @@ func _sync_colors_via_arrays_runtime_mesh() -> void:
 			cols.resize(vertex_count)
 			cols.fill(Color.BLACK)
 			arrays[Mesh.ARRAY_COLOR] = cols
-		_runtime_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, 0)
-		var mat_cached: Material = _source_materials_cache.get(surf_idx) as Material
-		if mat_cached:
-			_runtime_mesh.surface_set_material(_runtime_mesh.get_surface_count() - 1, mat_cached)
+		_runtime_mesh.add_surface_from_arrays(
+				Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, _surface_build_flags(surf_idx))
+		_apply_surface_material(_runtime_mesh, surf_idx)
 
 	parent.mesh = _runtime_mesh
 	for idx in instance_overrides:
@@ -803,12 +824,23 @@ func _try_fast_color_update(surface_idx: int, new_colors: PackedColorArray) -> b
 	return true
 
 
-## Single surface: try surface_get_arrays if not compressed. Returns true if added, false to use MeshDataTool.
-func _strip_custom_arrays_for_paint(arr: Array) -> void:
-	arr[Mesh.ARRAY_CUSTOM0] = null
-	arr[Mesh.ARRAY_CUSTOM1] = null
-	arr[Mesh.ARRAY_CUSTOM2] = null
-	arr[Mesh.ARRAY_CUSTOM3] = null
+## Only clear the CUSTOM slot that was migrated to ARRAY_COLOR; keep UV3+ / other customs.
+func _strip_migrated_color_custom(arr: Array, surf_idx: int) -> void:
+	if not _normalized_color_custom_slot.has(surf_idx):
+		return
+	var slot: int = int(_normalized_color_custom_slot[surf_idx])
+	if slot >= Mesh.ARRAY_CUSTOM0 and slot <= Mesh.ARRAY_CUSTOM3 and arr.size() > slot:
+		arr[slot] = null
+
+
+func _record_normalized_color_custom_slots(mesh: Mesh) -> void:
+	_normalized_color_custom_slot.clear()
+	if mesh == null:
+		return
+	for surf_idx in range(mesh.get_surface_count()):
+		var channel: int = SurfaceColorBinding.detect_color_channel(mesh, surf_idx)
+		if channel >= Mesh.ARRAY_CUSTOM0 and channel <= Mesh.ARRAY_CUSTOM3:
+			_normalized_color_custom_slot[surf_idx] = channel
 
 
 func _try_surface_get_arrays_single(surf_idx: int, result: ArrayMesh) -> bool:
@@ -825,7 +857,7 @@ func _try_surface_get_arrays_single(surf_idx: int, result: ArrayMesh) -> bool:
 
 	var vertex_count = verts.size()
 	arr = arr.duplicate(true)
-	_strip_custom_arrays_for_paint(arr)
+	_strip_migrated_color_custom(arr, surf_idx)
 	var cols = _ensure_packed_color_array(
 		surface_data.get(surf_idx) if surface_data.has(surf_idx) else null,
 		vertex_count)
@@ -835,20 +867,52 @@ func _try_surface_get_arrays_single(surf_idx: int, result: ArrayMesh) -> bool:
 	result.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr, [], {}, _surface_build_flags(surf_idx))
 	if result.get_surface_count() == count_before:
 		return false  # add_surface_from_arrays failed (e.g. invalid arrays), use MeshDataTool
-	var mat = _source_materials_cache.get(surf_idx)
-	if mat:
-		result.surface_set_material(result.get_surface_count() - 1, mat)
+	_apply_surface_material(result, surf_idx)
 	return true
 
 
+## Rebuild flags: preserve custom format types + bone-weight flag; optional dynamic update.
 func _surface_build_flags(surf_idx: int) -> int:
+	var flags: int = 0
+	var fmt: int = 0
+	if _source_mesh and surf_idx < _source_mesh.get_surface_count():
+		fmt = _source_mesh.surface_get_format(surf_idx)
+
+	var skip_slot: int = int(_normalized_color_custom_slot.get(surf_idx, -1))
+	for i in range(_CUSTOM_ARRAY_SLOTS.size()):
+		if _CUSTOM_ARRAY_SLOTS[i] == skip_slot:
+			continue
+		if (fmt & _CUSTOM_FORMAT_PRESENCE[i]) == 0:
+			continue
+		var custom_type: int = (fmt >> _CUSTOM_FORMAT_SHIFTS[i]) & Mesh.ARRAY_FORMAT_CUSTOM_MASK
+		flags |= custom_type << _CUSTOM_FORMAT_SHIFTS[i]
+
+	if (fmt & Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS) != 0:
+		flags |= Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS
+
 	if _paint_sync_mode == SYNC_ATTRIBUTE:
-		if _source_mesh and surf_idx < _source_mesh.get_surface_count():
-			var fmt: int = _source_mesh.surface_get_format(surf_idx)
-			if (fmt & Mesh.ARRAY_FLAG_COMPRESS_ATTRIBUTES) != 0:
-				return 0
-		return MESH_BUILD_FLAGS
-	return 0
+		if (fmt & Mesh.ARRAY_FLAG_COMPRESS_ATTRIBUTES) == 0:
+			flags |= MESH_BUILD_FLAGS
+	return flags
+
+
+## Apply material to the last surface of result (cache → source mesh → instance override).
+func _apply_surface_material(result: ArrayMesh, surf_idx: int) -> void:
+	if result == null or result.get_surface_count() == 0:
+		return
+	var last: int = result.get_surface_count() - 1
+	var mat: Material = _source_materials_cache.get(surf_idx) as Material
+	if mat == null and _source_mesh and surf_idx < _source_mesh.get_surface_count():
+		mat = _source_mesh.surface_get_material(surf_idx)
+	if mat == null:
+		var parent: MeshInstance3D = get_parent() as MeshInstance3D
+		if parent and surf_idx < parent.get_surface_override_material_count():
+			var ov: Material = parent.get_surface_override_material(surf_idx)
+			if ov and not _is_preview_paint_material(ov):
+				mat = ov
+	if mat:
+		result.surface_set_material(last, mat)
+		_source_materials_cache[surf_idx] = mat
 
 
 ## Per-Surface-Hybrid: use surface_get_arrays for non-compressed surfaces, MeshDataTool for compressed.
@@ -930,9 +994,7 @@ func _add_surface_via_mesh_data_tool(surf_idx: int, result: ArrayMesh) -> void:
 			tangents[i * 4 + 3] = t.d
 		arr[Mesh.ARRAY_TANGENT] = tangents
 	result.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr, [], {}, _surface_build_flags(surf_idx))
-	var mat = _source_materials_cache.get(surf_idx)
-	if mat:
-		result.surface_set_material(result.get_surface_count() - 1, mat)
+	_apply_surface_material(result, surf_idx)
 
 
 ## For non-compressed meshes: use surface_get_arrays to preserve UVs/tangents.
@@ -961,7 +1023,7 @@ func _try_surface_get_arrays_path() -> ArrayMesh:
 
 		var vertex_count = verts.size()
 		arr = arr.duplicate(true)
-		_strip_custom_arrays_for_paint(arr)
+		_strip_migrated_color_custom(arr, surf_idx)
 		var cols = _ensure_packed_color_array(
 			surface_data.get(surf_idx) if surface_data.has(surf_idx) else null,
 			vertex_count)
@@ -971,9 +1033,7 @@ func _try_surface_get_arrays_path() -> ArrayMesh:
 		result.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr, [], {}, _surface_build_flags(surf_idx))
 		if result.get_surface_count() == count_before:
 			return null  # Invalid array format (Godot 4.2+), use Per-Surface-Hybrid
-		var mat = _source_materials_cache.get(surf_idx)
-		if mat:
-			result.surface_set_material(result.get_surface_count() - 1, mat)
+		_apply_surface_material(result, surf_idx)
 
 	return result if result.get_surface_count() > 0 else null
 

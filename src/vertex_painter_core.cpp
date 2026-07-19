@@ -21,6 +21,44 @@ enum PaintMode {
 	MODE_SHARPEN = 4,
 };
 
+/// Flags for add_surface_from_arrays: custom format types + bone weights (+ optional dynamic).
+static uint64_t rebuild_surface_flags(uint64_t fmt, bool want_dynamic) {
+	uint64_t flags = 0;
+
+	const uint64_t presence[] = {
+		(uint64_t)Mesh::ARRAY_FORMAT_CUSTOM0,
+		(uint64_t)Mesh::ARRAY_FORMAT_CUSTOM1,
+		(uint64_t)Mesh::ARRAY_FORMAT_CUSTOM2,
+		(uint64_t)Mesh::ARRAY_FORMAT_CUSTOM3,
+	};
+	const int shifts[] = {
+		(int)Mesh::ARRAY_FORMAT_CUSTOM0_SHIFT,
+		(int)Mesh::ARRAY_FORMAT_CUSTOM1_SHIFT,
+		(int)Mesh::ARRAY_FORMAT_CUSTOM2_SHIFT,
+		(int)Mesh::ARRAY_FORMAT_CUSTOM3_SHIFT,
+	};
+	const uint64_t custom_mask = (uint64_t)Mesh::ARRAY_FORMAT_CUSTOM_MASK;
+
+	for (int i = 0; i < 4; i++) {
+		if ((fmt & presence[i]) == 0) {
+			continue;
+		}
+		uint64_t custom_type = (fmt >> shifts[i]) & custom_mask;
+		flags |= custom_type << shifts[i];
+	}
+
+	if (fmt & (uint64_t)Mesh::ARRAY_FLAG_USE_8_BONE_WEIGHTS) {
+		flags |= (uint64_t)Mesh::ARRAY_FLAG_USE_8_BONE_WEIGHTS;
+	}
+	if (want_dynamic && (fmt & (uint64_t)Mesh::ARRAY_FLAG_COMPRESS_ATTRIBUTES) == 0) {
+		flags |= (uint64_t)Mesh::ARRAY_FLAG_USE_DYNAMIC_UPDATE;
+	} else if ((fmt & (uint64_t)Mesh::ARRAY_FLAG_USE_DYNAMIC_UPDATE) != 0 &&
+			(fmt & (uint64_t)Mesh::ARRAY_FLAG_COMPRESS_ATTRIBUTES) == 0) {
+		flags |= (uint64_t)Mesh::ARRAY_FLAG_USE_DYNAMIC_UPDATE;
+	}
+	return flags;
+}
+
 double pow4(double x) {
 	double x2 = x * x;
 	return x2 * x2;
@@ -550,13 +588,15 @@ static bool apply_surface_via_arrays(
 	Variant colors_var = p_surface_colors.get(p_surf_idx, Variant());
 	arrays[Mesh::ARRAY_COLOR] = build_surface_colors(colors_var, vertex_count);
 
+	const uint64_t build_flags = rebuild_surface_flags(fmt, false);
+
 	const int count_before = p_result->get_surface_count();
 	p_result->add_surface_from_arrays(
 			Mesh::PRIMITIVE_TRIANGLES,
 			arrays,
 			TypedArray<Array>(),
 			Dictionary(),
-			0);
+			build_flags);
 
 	if (p_result->get_surface_count() == count_before) {
 		return false;
@@ -658,9 +698,8 @@ static bool apply_surface_via_mdt(
 	}
 
 	uint64_t build_flags = 0;
-	if (fmt & (uint64_t)Mesh::ARRAY_FLAG_COMPRESS_ATTRIBUTES) {
-		build_flags = 0;
-	} else if (fmt & (uint64_t)Mesh::ARRAY_FLAG_USE_DYNAMIC_UPDATE) {
+	if ((fmt & (uint64_t)Mesh::ARRAY_FLAG_COMPRESS_ATTRIBUTES) == 0 &&
+			(fmt & (uint64_t)Mesh::ARRAY_FLAG_USE_DYNAMIC_UPDATE) != 0) {
 		build_flags = Mesh::ARRAY_FLAG_USE_DYNAMIC_UPDATE;
 	}
 

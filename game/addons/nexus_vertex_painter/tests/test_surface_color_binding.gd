@@ -84,7 +84,7 @@ func _create_mesh_color_and_bone_custom0() -> ArrayMesh:
 	arrays[Mesh.ARRAY_CUSTOM0] = weights
 	arrays[Mesh.ARRAY_INDEX] = PackedInt32Array([0, 1, 2])
 
-	var custom_flags: int = Mesh.ARRAY_CUSTOM_RGBA8_UNORM << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT
+	var custom_flags: int = Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT
 	var flags: int = custom_flags | Mesh.ARRAY_FLAG_USE_DYNAMIC_UPDATE
 
 	var mesh := ArrayMesh.new()
@@ -147,8 +147,46 @@ func test_live_upload_with_color_and_bone_custom() -> void:
 		_fail("Mesh with ARRAY_COLOR and bone CUSTOM0 should support live color upload")
 
 
+func _create_mesh_rg_float_custom0() -> ArrayMesh:
+	var verts := PackedVector3Array([
+		Vector3(0, 0, 0),
+		Vector3(1, 0, 0),
+		Vector3(0.5, 1, 0),
+	])
+	var norms := PackedVector3Array([
+		Vector3(0, 1, 0),
+		Vector3(0, 1, 0),
+		Vector3(0, 1, 0),
+	])
+	# UV3-like RG floats (not RGBA color)
+	var uv3 := PackedFloat32Array([
+		0.1, 0.2,
+		0.3, 0.4,
+		0.5, 0.6,
+	])
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = norms
+	arrays[Mesh.ARRAY_CUSTOM0] = uv3
+	arrays[Mesh.ARRAY_INDEX] = PackedInt32Array([0, 1, 2])
+
+	var custom_flags: int = Mesh.ARRAY_CUSTOM_RG_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, custom_flags)
+	return mesh
+
+
+func test_rg_float_custom_not_detected_as_color() -> void:
+	var mesh: ArrayMesh = _create_mesh_rg_float_custom0()
+	var channel: int = SurfaceColorBinding.detect_color_channel(mesh, 0)
+	if channel != SurfaceColorBinding.CHANNEL_NONE:
+		_fail("RG_FLOAT CUSTOM0 (UV3) must not be detected as color, got %s" % SurfaceColorBinding.channel_label(channel))
+
+
 func _run_all_tests() -> void:
 	test_detect_custom0_channel()
 	test_read_custom0_colors()
 	test_normalize_custom0_mesh()
 	test_live_upload_with_color_and_bone_custom()
+	test_rg_float_custom_not_detected_as_color()

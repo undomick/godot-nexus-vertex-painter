@@ -7,11 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [2.3.0] - 2026-07-18
+## [2.3.0] - 2026-07-19
 
 ### Fixed
 
 - **Godot 4.7 bottom bar**: Enabling the plugin no longer pushes the editor bottom bar (Output / Debugger / version) off-screen. The painter dock is now a `ScrollContainer` so the right dock slot keeps a small minimum height under Godot 4.7's `use_hidden_tabs_for_min_size` layout.
+- **Extra UVs (UV3+)**: Painting / normalize no longer wipes `ARRAY_CUSTOM` channels used for UV3+; only a CUSTOM slot migrated to `ARRAY_COLOR` is cleared, and custom format flags are preserved on rebuild.
+- **Material slots**: Surface materials are re-applied after mesh rebuild from cache, source mesh, or instance overrides so multi-material slots are not left empty.
+
+
 
 ### Changed
 
@@ -19,7 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+
+
 ## [2.2.0] - 2026-05-31
+
+
 
 ### Added
 
@@ -28,8 +36,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Vertex color preview**: **Show vertex colors** blends painted vertex colors over the mesh materials via an overlay (with adjustable **VC overlay** strength), without replacing the source mesh while editing.
 - **Bake to Scene** ([PR #4](https://github.com/undomick/godot-nexus-vertex-painter/pull/4) by Robert-K): Bakes vertex colors into the ancestor scene file (`.tscn`, `.scn`, `.gltf`, `.glb`), then reimports and reloads the scene.
 - **Paint snapshot export / transfer**: Save world-space vertex colors before a Blender round-trip, then **Transfer from Snapshot** onto a reimported mesh (nearest-neighbor, optional normal filter). See `addons/nexus_vertex_painter/docs/VERTEX_COLOR_TRANSFER.md`.
-- **Face-corner / custom color attributes**: Detects colors in `ARRAY_CUSTOM` slots (not only `COLOR_0`), imports them into `surface_data`, and **normalizes to `ARRAY_COLOR` on the first paint** so Blender face-corner or custom-named layers remain editable.
+- **Face-corner / custom color attributes**: Detects colors in `ARRAY_CUSTOM` slots (not only `COLOR_0`), imports them into `surface_data`, and **normalizes to** `ARRAY_COLOR` **on the first paint** so Blender face-corner or custom-named layers remain editable.
 - **Combine Meshes**: Merge two or more selected `MeshInstance3D` nodes into one centered `ArrayMesh` (world-space merge; keeps baked vertex colors from painted meshes).
+
+
 
 ### Fixed
 
@@ -37,12 +47,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+
+
 ## [2.1.0] - 2026-03-03
+
+
 
 ### Added
 
 - Additional shaders for vertex color workflows
 - **Preview Smart Mask**: Visual overlay to preview which areas the slope/curvature mask will affect before painting (white = paintable, black = masked out)
+
+
 
 ### Fixed
 
@@ -52,6 +68,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Data integrity**: `_ensure_packed_color_array` uses slice when shrinking to avoid mutating original; Preview overlays cleared after Bake
 - **Performance**: Single raycast instead of per-mesh; early exit when no channels active (Fill/Clear); central `_get_mask_settings()` helper; C++ explicit `PackedInt32Array` for neighbor map
 - **UX**: Texture drop zone now warns when load fails or resource is not a Texture2D
+
+
 
 ### Known Issues
 
@@ -63,7 +81,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+
+
 ## [2.0.0] - 2026-02-19
+
+
 
 ### Added
 
@@ -76,11 +98,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GDExtension build system (SConstruct, godot-cpp) in project `src/` folder
 - Compiled binaries deployed to `addons/nexus_vertex_painter/bin/` only (source code outside Godot project)
 
+
+
 ### Changed
 
 - Project structure: C++ sources and build files moved to `src/` at project root
 - Significantly improved performance on detailed models with high vertex counts
 - Requires Godot 4.2+ for GDExtension compatibility
+
+
 
 ### Fixed
 
@@ -88,6 +114,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Slow Blur/Sharpen tools due to mesh topology analysis
 
 ---
+
+
 
 ## [1.6] - (previous)
 

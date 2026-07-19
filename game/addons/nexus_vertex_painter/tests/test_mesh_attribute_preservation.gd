@@ -174,6 +174,157 @@ func _run_all_tests() -> void:
 	test_uvs_preserved_via_manual_apply()
 	test_uvs_preserved_after_apply_colors_sync()
 	test_runtime_mesh_enables_fast_color_path()
+	test_custom_uv3_preserved_after_apply_colors()
+	test_multi_surface_materials_preserved()
+
+
+func _create_mesh_with_uvs_and_custom_uv3() -> ArrayMesh:
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	var verts = PackedVector3Array([
+		Vector3(0, 0, 0),
+		Vector3(1, 0, 0),
+		Vector3(0.5, 1, 0)
+	])
+	var normals = PackedVector3Array([
+		Vector3(0, 1, 0),
+		Vector3(0, 1, 0),
+		Vector3(0, 1, 0)
+	])
+	var colors = PackedColorArray([
+		Color(0.2, 0.3, 0.4, 1.0),
+		Color(0.5, 0.6, 0.7, 1.0),
+		Color(0.8, 0.9, 1.0, 1.0)
+	])
+	var uvs = PackedVector2Array([
+		Vector2(0.0, 0.0),
+		Vector2(1.0, 0.0),
+		Vector2(0.5, 1.0)
+	])
+	var uv2 = PackedVector2Array([
+		Vector2(0.25, 0.25),
+		Vector2(0.75, 0.25),
+		Vector2(0.5, 0.75)
+	])
+	var uv3 = PackedFloat32Array([
+		0.11, 0.22,
+		0.33, 0.44,
+		0.55, 0.66,
+	])
+	arr[Mesh.ARRAY_VERTEX] = verts
+	arr[Mesh.ARRAY_NORMAL] = normals
+	arr[Mesh.ARRAY_COLOR] = colors
+	arr[Mesh.ARRAY_TEX_UV] = uvs
+	arr[Mesh.ARRAY_TEX_UV2] = uv2
+	arr[Mesh.ARRAY_CUSTOM0] = uv3
+	arr[Mesh.ARRAY_INDEX] = PackedInt32Array([0, 1, 2])
+
+	var custom_flags: int = Mesh.ARRAY_CUSTOM_RG_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr, [], {}, custom_flags)
+	return mesh
+
+
+func _get_custom0_floats(mesh: Mesh, surf_idx: int) -> PackedFloat32Array:
+	if not mesh is ArrayMesh:
+		return PackedFloat32Array()
+	var format: int = mesh.surface_get_format(surf_idx)
+	if (format & Mesh.ARRAY_FORMAT_CUSTOM0) == 0:
+		return PackedFloat32Array()
+	var arrays: Array = (mesh as ArrayMesh).surface_get_arrays(surf_idx)
+	if arrays.size() <= Mesh.ARRAY_CUSTOM0:
+		return PackedFloat32Array()
+	var data: Variant = arrays[Mesh.ARRAY_CUSTOM0]
+	if data is PackedFloat32Array:
+		return data as PackedFloat32Array
+	return PackedFloat32Array()
+
+
+func test_custom_uv3_preserved_after_apply_colors() -> void:
+	var mesh_instance = MeshInstance3D.new()
+	mesh_instance.mesh = _create_mesh_with_uvs_and_custom_uv3()
+	add_child(mesh_instance)
+
+	var original_custom: PackedFloat32Array = _get_custom0_floats(mesh_instance.mesh, 0)
+	if original_custom.size() != 6:
+		_fail("UV3 setup: expected 6 CUSTOM0 floats, got %d" % original_custom.size())
+		return
+
+	var data_node = VertexColorData.new()
+	data_node.name = "VertexColorData"
+	mesh_instance.add_child(data_node)
+	data_node.initialize_from_mesh()
+	data_node.surface_data[0] = PackedColorArray([
+		Color(1, 0, 0, 1),
+		Color(0, 1, 0, 1),
+		Color(0, 0, 1, 1),
+	])
+	data_node._apply_colors()
+
+	var result_mesh = mesh_instance.mesh
+	if result_mesh == null:
+		_fail("UV3: mesh is null after _apply_colors")
+		return
+
+	var result_custom: PackedFloat32Array = _get_custom0_floats(result_mesh, 0)
+	if result_custom.size() != original_custom.size():
+		_fail("UV3: CUSTOM0 size changed from %d to %d (extra UVs wiped)" % [
+			original_custom.size(), result_custom.size()])
+		return
+
+	for i in range(original_custom.size()):
+		if not is_equal_approx(original_custom[i], result_custom[i]):
+			_fail("UV3: CUSTOM0[%d] changed from %s to %s" % [
+				i, str(original_custom[i]), str(result_custom[i])])
+			return
+
+
+func test_multi_surface_materials_preserved() -> void:
+	var arr0 := []
+	arr0.resize(Mesh.ARRAY_MAX)
+	arr0[Mesh.ARRAY_VERTEX] = PackedVector3Array([
+		Vector3(0, 0, 0), Vector3(1, 0, 0), Vector3(0.5, 1, 0)])
+	arr0[Mesh.ARRAY_NORMAL] = PackedVector3Array([
+		Vector3(0, 1, 0), Vector3(0, 1, 0), Vector3(0, 1, 0)])
+	arr0[Mesh.ARRAY_COLOR] = PackedColorArray([
+		Color.WHITE, Color.WHITE, Color.WHITE])
+	arr0[Mesh.ARRAY_INDEX] = PackedInt32Array([0, 1, 2])
+
+	var arr1 := arr0.duplicate(true)
+
+	var mat0 := StandardMaterial3D.new()
+	mat0.albedo_color = Color(1, 0, 0)
+	var mat1 := StandardMaterial3D.new()
+	mat1.albedo_color = Color(0, 1, 0)
+
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr0)
+	mesh.surface_set_material(0, mat0)
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr1)
+	mesh.surface_set_material(1, mat1)
+
+	var mesh_instance = MeshInstance3D.new()
+	mesh_instance.mesh = mesh
+	add_child(mesh_instance)
+
+	var data_node = VertexColorData.new()
+	mesh_instance.add_child(data_node)
+	data_node.initialize_from_mesh()
+	data_node.surface_data[0] = PackedColorArray([Color.RED, Color.RED, Color.RED])
+	data_node.surface_data[1] = PackedColorArray([Color.GREEN, Color.GREEN, Color.GREEN])
+	data_node._apply_colors()
+
+	var result: Mesh = mesh_instance.mesh
+	if result == null or result.get_surface_count() < 2:
+		_fail("Materials: expected 2 surfaces after apply")
+		return
+
+	var r0: Material = result.surface_get_material(0)
+	var r1: Material = result.surface_get_material(1)
+	if r0 != mat0:
+		_fail("Materials: surface 0 material was lost or replaced")
+	if r1 != mat1:
+		_fail("Materials: surface 1 material was lost or replaced")
 
 
 func test_uvs_preserved_after_apply_colors_sync() -> void:

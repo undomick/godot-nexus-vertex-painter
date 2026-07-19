@@ -17,6 +17,13 @@ const _CUSTOM_FORMAT_FLAGS: Array[int] = [
 	Mesh.ARRAY_FORMAT_CUSTOM3,
 ]
 
+const _CUSTOM_FORMAT_SHIFTS: Array[int] = [
+	Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT,
+	Mesh.ARRAY_FORMAT_CUSTOM1_SHIFT,
+	Mesh.ARRAY_FORMAT_CUSTOM2_SHIFT,
+	Mesh.ARRAY_FORMAT_CUSTOM3_SHIFT,
+]
+
 
 static func channel_label(channel: int) -> String:
 	if channel == Mesh.ARRAY_COLOR:
@@ -143,6 +150,31 @@ static func _custom_format_flag_for_slot(slot: int) -> int:
 	return 0
 
 
+static func _custom_format_shift_for_slot(slot: int) -> int:
+	for i in range(_CUSTOM_ARRAY_INDICES.size()):
+		if _CUSTOM_ARRAY_INDICES[i] == slot:
+			return _CUSTOM_FORMAT_SHIFTS[i]
+	return 0
+
+
+## True for custom formats that can hold vertex colors (not RG/R float UV extras).
+static func custom_format_looks_like_color(custom_type: int) -> bool:
+	match custom_type:
+		Mesh.ARRAY_CUSTOM_RGBA8_UNORM, \
+		Mesh.ARRAY_CUSTOM_RGBA8_SNORM, \
+		Mesh.ARRAY_CUSTOM_RGBA_HALF, \
+		Mesh.ARRAY_CUSTOM_RGBA_FLOAT:
+			return true
+		_:
+			return false
+
+
+static func _custom_slot_format_type(mesh: Mesh, surf_idx: int, slot: int) -> int:
+	var shift: int = _custom_format_shift_for_slot(slot)
+	var format: int = mesh.surface_get_format(surf_idx)
+	return (format >> shift) & Mesh.ARRAY_FORMAT_CUSTOM_MASK
+
+
 static func _custom_slot_looks_like_vertex_colors(mesh: Mesh, surf_idx: int, slot: int) -> bool:
 	var vertex_count: int = mesh.surface_get_array_len(surf_idx)
 	if vertex_count <= 0:
@@ -152,8 +184,15 @@ static func _custom_slot_looks_like_vertex_colors(mesh: Mesh, surf_idx: int, slo
 		return false
 
 	var format: int = mesh.surface_get_format(surf_idx)
+	if (format & _custom_format_flag_for_slot(slot)) == 0:
+		return false
+
+	var custom_type: int = _custom_slot_format_type(mesh, surf_idx, slot)
+	if not custom_format_looks_like_color(custom_type):
+		return false
+
 	if (format & Mesh.ARRAY_FLAG_COMPRESS_ATTRIBUTES) != 0:
-		return (format & _custom_format_flag_for_slot(slot)) != 0
+		return true
 
 	var arrays: Array = mesh.surface_get_arrays(surf_idx)
 	if arrays.size() <= slot:
