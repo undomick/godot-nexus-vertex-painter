@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.1] - 2026-07-20
+
+### Fixed
+
+- Painting no longer makes meshes vanish (`PACKED_BYTE_ARRAY` / empty rebuild), including on compressed GLB meshes with float CUSTOM channels (UV3+)
+- Paint/rebuild no longer reloads the Revert-only original mesh path
+- **Revert to original** works again for imported GLB/GLTF sub-resources (`file.glb::ArrayMesh_…`)
+- **Bake to Scene** on `.tscn`/`.scn` no longer triggers a broken reimport or freed-scene access
+
+---
+
 ## [2.3.0] - 2026-07-19
 
 ### Fixed
@@ -15,19 +26,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Extra UVs (UV3+)**: Painting / normalize no longer wipes `ARRAY_CUSTOM` channels used for UV3+; only a CUSTOM slot migrated to `ARRAY_COLOR` is cleared, and custom format flags are preserved on rebuild.
 - **Material slots**: Surface materials are re-applied after mesh rebuild from cache, source mesh, or instance overrides so multi-material slots are not left empty.
 
-
-
 ### Changed
 
 - Editor dock registration sets an explicit `layout_key` and `available_layouts` (vertical + floating).
 
 ---
 
-
-
 ## [2.2.0] - 2026-05-31
-
-
 
 ### Added
 
@@ -39,26 +44,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Face-corner / custom color attributes**: Detects colors in `ARRAY_CUSTOM` slots (not only `COLOR_0`), imports them into `surface_data`, and **normalizes to** `ARRAY_COLOR` **on the first paint** so Blender face-corner or custom-named layers remain editable.
 - **Combine Meshes**: Merge two or more selected `MeshInstance3D` nodes into one centered `ArrayMesh` (world-space merge; keeps baked vertex colors from painted meshes).
 
-
-
 ### Fixed
 
 - **Fast paint path** no longer disables live GPU color upload when a mesh has `ARRAY_COLOR` plus unrelated `ARRAY_CUSTOM` data.
 
 ---
 
-
-
 ## [2.1.0] - 2026-03-03
-
-
 
 ### Added
 
 - Additional shaders for vertex color workflows
 - **Preview Smart Mask**: Visual overlay to preview which areas the slope/curvature mask will affect before painting (white = paintable, black = masked out)
-
-
 
 ### Fixed
 
@@ -68,8 +65,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Data integrity**: `_ensure_packed_color_array` uses slice when shrinking to avoid mutating original; Preview overlays cleared after Bake
 - **Performance**: Single raycast instead of per-mesh; early exit when no channels active (Fill/Clear); central `_get_mask_settings()` helper; C++ explicit `PackedInt32Array` for neighbor map
 - **UX**: Texture drop zone now warns when load fails or resource is not a Texture2D
-
-
 
 ### Known Issues
 
@@ -81,11 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-
-
 ## [2.0.0] - 2026-02-19
-
-
 
 ### Added
 
@@ -98,15 +89,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GDExtension build system (SConstruct, godot-cpp) in project `src/` folder
 - Compiled binaries deployed to `addons/nexus_vertex_painter/bin/` only (source code outside Godot project)
 
-
-
 ### Changed
 
 - Project structure: C++ sources and build files moved to `src/` at project root
 - Significantly improved performance on detailed models with high vertex counts
 - Requires Godot 4.2+ for GDExtension compatibility
-
-
 
 ### Fixed
 
@@ -114,8 +101,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Slow Blur/Sharpen tools due to mesh topology analysis
 
 ---
-
-
 
 ## [1.6] - (previous)
 

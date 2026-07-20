@@ -1,7 +1,17 @@
 # Blender project files (excluded from git push)
 blender/
 
+# Local Cursor / editor config
+.cursor/
+# Local / vendor trees not tracked with this repo
+game/addons/nexus_importer/
+game/props/
+
 # GDExtension binaries (built locally or from CI release artifacts)
-game/addons/nexus_vertex_painter/bin/**/*
+game/addons/nexus_vertex_painter/bin/**
+!game/addons/nexus_vertex_painter/bin/**/
 !game/addons/nexus_vertex_painter/bin/**/.gitkeep
-!game/addons/nexus_vertex_painter/bin/.gitkeep
+
+# SCons intermediate objects (must not be committed from src/)
+src/**/*.obj
+src/**/*.o

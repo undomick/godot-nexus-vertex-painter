@@ -18,7 +18,7 @@ customs = [os.path.abspath(path) for path in customs]
 opts = Variables(customs, ARGUMENTS)
 opts.Update(localEnv)
 
-addon_version = os.environ.get("ADDON_VERSION", "2.3.0")
+addon_version = os.environ.get("ADDON_VERSION", "2.3.1")
 addon_author = os.environ.get("ADDON_AUTHOR", "Michael Kulzer")
 
 Help(opts.GenerateHelpText(localEnv))
@@ -64,10 +64,23 @@ lib_filename = "{}{}{}{}".format(
     env.subst("$SHLIBPREFIX"), libname, suffix, env.subst("$SHLIBSUFFIX")
 )
 
+# Put .obj/.o next to the library under bin/, never beside sources in src/.
+obj_dir = "bin/{}/obj".format(env["platform"])
+
+
+def shared_objects(env, sources, obj_dir):
+    objects = []
+    for src in sources:
+        name = os.path.splitext(os.path.basename(str(src)))[0]
+        target = os.path.join(obj_dir, name + env.subst("$OBJSUFFIX"))
+        objects.append(env.SharedObject(target, src))
+    return objects
+
+
 # Build to local bin/ first, then install to addon
 library = env.SharedLibrary(
     "bin/{}/{}".format(env["platform"], lib_filename),
-    source=sources,
+    source=shared_objects(env, sources, obj_dir),
 )
 
 # Godot only needs the shared library at runtime. MSVC may register .lib/.exp side

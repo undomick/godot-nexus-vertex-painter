@@ -176,6 +176,11 @@ func _run_all_tests() -> void:
 	test_runtime_mesh_enables_fast_color_path()
 	test_custom_uv3_preserved_after_apply_colors()
 	test_multi_surface_materials_preserved()
+	test_original_path_topology_mismatch_keeps_current_mesh()
+	test_float_custom_rebuild_keeps_mesh()
+	test_arrays_sync_never_wipes_live_mesh()
+	test_revert_resolves_glb_subresource_path()
+	test_bake_scene_path_needs_reimport()
 
 
 func _create_mesh_with_uvs_and_custom_uv3() -> ArrayMesh:
@@ -325,6 +330,158 @@ func test_multi_surface_materials_preserved() -> void:
 		_fail("Materials: surface 0 material was lost or replaced")
 	if r1 != mat1:
 		_fail("Materials: surface 1 material was lost or replaced")
+
+
+## Door-style bug: meta points at a multi-surface "original" while the instance has a
+## different 1-surface mesh. Paint rebuild must keep the current topology.
+func test_original_path_topology_mismatch_keeps_current_mesh() -> void:
+	var current := _create_mesh_with_uvs()
+	var current_verts: int = current.surface_get_array_len(0)
+
+	var other_arr := []
+	other_arr.resize(Mesh.ARRAY_MAX)
+	other_arr[Mesh.ARRAY_VERTEX] = PackedVector3Array([
+		Vector3(0, 0, 0), Vector3(2, 0, 0), Vector3(1, 2, 0),
+		Vector3(0, 0, 1), Vector3(2, 0, 1), Vector3(1, 2, 1)])
+	other_arr[Mesh.ARRAY_NORMAL] = PackedVector3Array([
+		Vector3(0, 1, 0), Vector3(0, 1, 0), Vector3(0, 1, 0),
+		Vector3(0, 1, 0), Vector3(0, 1, 0), Vector3(0, 1, 0)])
+	other_arr[Mesh.ARRAY_COLOR] = PackedColorArray([
+		Color.WHITE, Color.WHITE, Color.WHITE,
+		Color.WHITE, Color.WHITE, Color.WHITE])
+	other_arr[Mesh.ARRAY_INDEX] = PackedInt32Array([0, 1, 2, 3, 4, 5])
+	var other_mesh := ArrayMesh.new()
+	other_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, other_arr)
+	other_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, other_arr.duplicate(true))
+	other_mesh.resource_path = "res://addons/nexus_vertex_painter/tests/_fake_original_multi.mesh"
+
+	var mesh_instance := MeshInstance3D.new()
+	mesh_instance.mesh = current
+	mesh_instance.set_meta("_vertex_paint_original_path", other_mesh.resource_path)
+	# Keep other_mesh alive via a dummy load path simulation: inject into ResourceLoader
+	# is not possible; instead verify _pick_source_mesh ignores meta and uses current.
+	add_child(mesh_instance)
+
+	var data_node := VertexColorData.new()
+	mesh_instance.add_child(data_node)
+	data_node.initialize_from_mesh()
+
+	var picked: Mesh = data_node._pick_source_mesh(mesh_instance, current)
+	if picked != current:
+		_fail("Topology: _pick_source_mesh must return current mesh, not original_path target")
+		return
+
+	data_node.surface_data[0] = PackedColorArray([
+		Color(1, 0, 0, 1), Color(0, 1, 0, 1), Color(0, 0, 1, 1)])
+	data_node._apply_colors()
+
+	var result: Mesh = mesh_instance.mesh
+	if result == null:
+		_fail("Topology: mesh became null after apply")
+		return
+	if result.get_surface_count() != 1:
+		_fail("Topology: expected 1 surface after apply, got %d" % result.get_surface_count())
+		return
+	if result.surface_get_array_len(0) != current_verts:
+		_fail("Topology: vertex count changed from %d to %d" % [
+			current_verts, result.surface_get_array_len(0)])
+		return
+
+	# Keep other_mesh referenced so GDScript does not free it mid-test.
+	if other_mesh.get_surface_count() < 2:
+		_fail("Topology setup: other mesh should have 2 surfaces")
+
+
+## Float CUSTOM with wrong/default format bits must still rebuild (Door PACKED_BYTE_ARRAY case).
+func test_float_custom_rebuild_keeps_mesh() -> void:
+	var mesh: ArrayMesh = _create_mesh_with_uvs_and_custom_uv3()
+	var mesh_instance := MeshInstance3D.new()
+	mesh_instance.mesh = mesh
+	add_child(mesh_instance)
+
+	var data_node := VertexColorData.new()
+	mesh_instance.add_child(data_node)
+	data_node.initialize_from_mesh()
+	data_node.surface_data[0] = PackedColorArray([
+		Color(1, 0, 0, 1), Color(0, 1, 0, 1), Color(0, 0, 1, 1)])
+	data_node._apply_colors()
+
+	var result: Mesh = mesh_instance.mesh
+	if result == null or result.get_surface_count() < 1:
+		_fail("Float CUSTOM: mesh lost surfaces after _apply_colors")
+		return
+	if result.surface_get_array_len(0) != 3:
+		_fail("Float CUSTOM: vertex count changed after rebuild")
+
+
+## Arrays sync must not clear parent.mesh in-place when rebuild would fail.
+func test_arrays_sync_never_wipes_live_mesh() -> void:
+	var mesh_instance := MeshInstance3D.new()
+	mesh_instance.mesh = _create_mesh_with_uvs_and_custom_uv3()
+	add_child(mesh_instance)
+
+	var data_node := VertexColorData.new()
+	mesh_instance.add_child(data_node)
+	data_node.initialize_from_mesh()
+	data_node._bind_paint_mesh_from_parent()
+	# Force alias condition that previously wiped the live mesh.
+	data_node._runtime_mesh = mesh_instance.mesh as ArrayMesh
+	data_node.surface_data[0] = PackedColorArray([
+		Color(0.2, 0.3, 0.4, 1), Color(0.5, 0.6, 0.7, 1), Color(0.8, 0.9, 1.0, 1)])
+	data_node._sync_colors_via_arrays_runtime_mesh()
+
+	var result: Mesh = mesh_instance.mesh
+	if result == null or result.get_surface_count() < 1:
+		_fail("Alias sync: live mesh was wiped (0 surfaces)")
+		return
+	if result.surface_get_array_len(0) != 3:
+		_fail("Alias sync: unexpected vertex count after sync")
+
+
+## Revert must resolve imported GLB paths (res://file.glb::ArrayMesh_xxx).
+func test_revert_resolves_glb_subresource_path() -> void:
+	var glb_path := "res://props/assets/_door_/door1.glb"
+	if not ResourceLoader.exists(glb_path):
+		return
+
+	var scene := load(glb_path) as PackedScene
+	if scene == null:
+		_fail("Revert GLB: could not load PackedScene")
+		return
+
+	var inst: Node = scene.instantiate()
+	var want_path: String = ""
+	var surface_count: int = 0
+	for mi in inst.find_children("*", "MeshInstance3D", true, false):
+		var mesh_inst := mi as MeshInstance3D
+		if mesh_inst.mesh and mesh_inst.mesh.resource_path.contains("::"):
+			want_path = mesh_inst.mesh.resource_path
+			surface_count = mesh_inst.mesh.get_surface_count()
+			break
+	inst.free()
+
+	if want_path.is_empty():
+		_fail("Revert GLB: no MeshInstance3D with :: resource_path in door1.glb")
+		return
+
+	var bake := VertexPaintBake.new()
+	var loaded: Mesh = bake.load_mesh_from_original_path(want_path)
+	if loaded == null:
+		_fail("Revert GLB: load_mesh_from_original_path returned null for %s" % want_path)
+		return
+	if loaded.get_surface_count() != surface_count:
+		_fail("Revert GLB: surface count mismatch after resolve")
+
+
+func test_bake_scene_path_needs_reimport() -> void:
+	if VertexPaintBake.scene_path_needs_reimport("res://foo.tscn"):
+		_fail("Bake: .tscn must not use reimport_files")
+	if VertexPaintBake.scene_path_needs_reimport("res://foo.scn"):
+		_fail("Bake: .scn must not use reimport_files")
+	if not VertexPaintBake.scene_path_needs_reimport("res://foo.glb"):
+		_fail("Bake: .glb should use reimport_files")
+	if not VertexPaintBake.scene_path_needs_reimport("res://foo.gltf"):
+		_fail("Bake: .gltf should use reimport_files")
 
 
 func test_uvs_preserved_after_apply_colors_sync() -> void:

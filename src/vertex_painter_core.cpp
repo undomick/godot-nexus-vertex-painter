@@ -21,15 +21,14 @@ enum PaintMode {
 	MODE_SHARPEN = 4,
 };
 
-/// Flags for add_surface_from_arrays: custom format types + bone weights (+ optional dynamic).
-static uint64_t rebuild_surface_flags(uint64_t fmt, bool want_dynamic) {
+/// Derive custom format flags from actual array Variant types; null mismatched customs.
+static uint64_t prepare_arrays_for_rebuild(Array &arrays, int vertex_count, uint64_t fmt, bool want_dynamic) {
 	uint64_t flags = 0;
-
-	const uint64_t presence[] = {
-		(uint64_t)Mesh::ARRAY_FORMAT_CUSTOM0,
-		(uint64_t)Mesh::ARRAY_FORMAT_CUSTOM1,
-		(uint64_t)Mesh::ARRAY_FORMAT_CUSTOM2,
-		(uint64_t)Mesh::ARRAY_FORMAT_CUSTOM3,
+	const int custom_slots[] = {
+		(int)Mesh::ARRAY_CUSTOM0,
+		(int)Mesh::ARRAY_CUSTOM1,
+		(int)Mesh::ARRAY_CUSTOM2,
+		(int)Mesh::ARRAY_CUSTOM3,
 	};
 	const int shifts[] = {
 		(int)Mesh::ARRAY_FORMAT_CUSTOM0_SHIFT,
@@ -37,17 +36,45 @@ static uint64_t rebuild_surface_flags(uint64_t fmt, bool want_dynamic) {
 		(int)Mesh::ARRAY_FORMAT_CUSTOM2_SHIFT,
 		(int)Mesh::ARRAY_FORMAT_CUSTOM3_SHIFT,
 	};
-	const uint64_t custom_mask = (uint64_t)Mesh::ARRAY_FORMAT_CUSTOM_MASK;
 
 	for (int i = 0; i < 4; i++) {
-		if ((fmt & presence[i]) == 0) {
+		const int slot = custom_slots[i];
+		if (arrays.size() <= slot) {
 			continue;
 		}
-		uint64_t custom_type = (fmt >> shifts[i]) & custom_mask;
-		flags |= custom_type << shifts[i];
+		Variant data = arrays[slot];
+		if (data.get_type() == Variant::NIL) {
+			continue;
+		}
+
+		int custom_type = -1;
+		if (data.get_type() == Variant::PACKED_BYTE_ARRAY) {
+			PackedByteArray bytes = data;
+			if (bytes.size() >= vertex_count * 4) {
+				custom_type = (int)Mesh::ARRAY_CUSTOM_RGBA8_UNORM;
+			} else {
+				arrays[slot] = Variant();
+				continue;
+			}
+		} else if (data.get_type() == Variant::PACKED_FLOAT32_ARRAY) {
+			PackedFloat32Array floats = data;
+			if (vertex_count > 0 && floats.size() == vertex_count * 2) {
+				custom_type = (int)Mesh::ARRAY_CUSTOM_RG_FLOAT;
+			} else if (floats.size() >= vertex_count * 4) {
+				custom_type = (int)Mesh::ARRAY_CUSTOM_RGBA_FLOAT;
+			} else {
+				arrays[slot] = Variant();
+				continue;
+			}
+		} else {
+			arrays[slot] = Variant();
+			continue;
+		}
+		flags |= (uint64_t)custom_type << shifts[i];
 	}
 
-	if (fmt & (uint64_t)Mesh::ARRAY_FLAG_USE_8_BONE_WEIGHTS) {
+	if ((fmt & (uint64_t)Mesh::ARRAY_FLAG_COMPRESS_ATTRIBUTES) == 0 &&
+			(fmt & (uint64_t)Mesh::ARRAY_FLAG_USE_8_BONE_WEIGHTS) != 0) {
 		flags |= (uint64_t)Mesh::ARRAY_FLAG_USE_8_BONE_WEIGHTS;
 	}
 	if (want_dynamic && (fmt & (uint64_t)Mesh::ARRAY_FLAG_COMPRESS_ATTRIBUTES) == 0) {
@@ -588,7 +615,7 @@ static bool apply_surface_via_arrays(
 	Variant colors_var = p_surface_colors.get(p_surf_idx, Variant());
 	arrays[Mesh::ARRAY_COLOR] = build_surface_colors(colors_var, vertex_count);
 
-	const uint64_t build_flags = rebuild_surface_flags(fmt, false);
+	const uint64_t build_flags = prepare_arrays_for_rebuild(arrays, vertex_count, fmt, false);
 
 	const int count_before = p_result->get_surface_count();
 	p_result->add_surface_from_arrays(

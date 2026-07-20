@@ -39,12 +39,6 @@ const _CUSTOM_ARRAY_SLOTS: Array[int] = [
 	Mesh.ARRAY_CUSTOM2,
 	Mesh.ARRAY_CUSTOM3,
 ]
-const _CUSTOM_FORMAT_PRESENCE: Array[int] = [
-	Mesh.ARRAY_FORMAT_CUSTOM0,
-	Mesh.ARRAY_FORMAT_CUSTOM1,
-	Mesh.ARRAY_FORMAT_CUSTOM2,
-	Mesh.ARRAY_FORMAT_CUSTOM3,
-]
 const _CUSTOM_FORMAT_SHIFTS: Array[int] = [
 	Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT,
 	Mesh.ARRAY_FORMAT_CUSTOM1_SHIFT,
@@ -406,7 +400,7 @@ func ensure_paintable_color_mesh() -> bool:
 		_prewarm_attrib_upload_cache(rebuilt)
 
 	for idx in instance_overrides:
-		if idx < parent.get_surface_override_material_count():
+		if idx < mini(parent.get_surface_override_material_count(), rebuilt.get_surface_count()):
 			parent.set_surface_override_material(idx, instance_overrides[idx])
 
 	VertexPainterLog.info("Normalized vertex colors to ARRAY_COLOR for painting (%s)." % parent.name)
@@ -666,22 +660,35 @@ func _detect_paint_sync_mode(mesh: ArrayMesh) -> void:
 
 
 ## v2.0-style GPU sync: duplicate cached surface arrays and inject surface_data colors.
+## Always rebuilds into a NEW ArrayMesh so clear/failed add never wipes parent.mesh in-place.
 func _sync_colors_via_arrays_runtime_mesh() -> void:
 	var parent: MeshInstance3D = get_parent() as MeshInstance3D
 	if not parent or _source_arrays_cache.is_empty():
 		return
 
-	if _runtime_mesh == null:
-		_runtime_mesh = ArrayMesh.new()
-		_runtime_mesh.resource_name = _source_mesh.resource_name if _source_mesh else ""
+	var has_valid_cache: bool = false
+	for cached in _source_arrays_cache.values():
+		if cached is Array:
+			has_valid_cache = true
+			break
+	if not has_valid_cache:
+		VertexPainterLog.warn(
+				"Arrays color sync skipped: no valid cached surfaces on '%s'." % parent.name)
+		return
 
+	var previous_mesh: Mesh = parent.mesh
 	var instance_overrides: Dictionary = {}
 	for idx in range(parent.get_surface_override_material_count()):
 		var mat: Material = parent.get_surface_override_material(idx)
 		if mat:
 			instance_overrides[idx] = mat
 
-	_runtime_mesh.clear_surfaces()
+	var rebuilt := ArrayMesh.new()
+	if _source_mesh:
+		rebuilt.resource_name = _source_mesh.resource_name
+	elif previous_mesh:
+		rebuilt.resource_name = previous_mesh.resource_name
+
 	var sorted_indices: Array = _source_arrays_cache.keys()
 	sorted_indices.sort()
 	for surf_idx in sorted_indices:
@@ -689,7 +696,6 @@ func _sync_colors_via_arrays_runtime_mesh() -> void:
 		if not cached is Array:
 			continue
 		var arrays: Array = (cached as Array).duplicate(true)
-		_strip_migrated_color_custom(arrays, surf_idx)
 		var verts: Variant = arrays[Mesh.ARRAY_VERTEX]
 		if verts == null or not verts is PackedVector3Array:
 			continue
@@ -703,13 +709,24 @@ func _sync_colors_via_arrays_runtime_mesh() -> void:
 			cols.resize(vertex_count)
 			cols.fill(Color.BLACK)
 			arrays[Mesh.ARRAY_COLOR] = cols
-		_runtime_mesh.add_surface_from_arrays(
-				Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, _surface_build_flags(surf_idx))
-		_apply_surface_material(_runtime_mesh, surf_idx)
+		var build_flags: int = _prepare_arrays_for_rebuild(arrays, surf_idx, vertex_count)
+		var count_before: int = rebuilt.get_surface_count()
+		rebuilt.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, build_flags)
+		if rebuilt.get_surface_count() > count_before:
+			_apply_surface_material(rebuilt, surf_idx)
 
-	parent.mesh = _runtime_mesh
+	if rebuilt.get_surface_count() == 0:
+		VertexPainterLog.warn(
+				"Arrays color sync produced no surfaces on '%s'; keeping previous mesh." % parent.name)
+		return
+
+	_runtime_mesh = rebuilt
+	parent.mesh = rebuilt
+	var override_limit: int = mini(
+			parent.get_surface_override_material_count(),
+			rebuilt.get_surface_count())
 	for idx in instance_overrides:
-		if idx < parent.get_surface_override_material_count():
+		if idx < override_limit:
 			parent.set_surface_override_material(idx, instance_overrides[idx])
 
 
@@ -843,6 +860,62 @@ func _record_normalized_color_custom_slots(mesh: Mesh) -> void:
 			_normalized_color_custom_slot[surf_idx] = channel
 
 
+## Sanitize CUSTOM slots and return add_surface_from_arrays flags from actual array types.
+## Avoids PACKED_BYTE_ARRAY errors when format bits say RGBA8 but data is PackedFloat32Array.
+func _prepare_arrays_for_rebuild(arr: Array, surf_idx: int, vertex_count: int) -> int:
+	_strip_migrated_color_custom(arr, surf_idx)
+
+	var flags: int = 0
+	var fmt: int = 0
+	if _source_mesh and surf_idx < _source_mesh.get_surface_count():
+		fmt = _source_mesh.surface_get_format(surf_idx)
+
+	# Compressed format bits overlap custom type shifts — never trust them for flags.
+	var source_compressed: bool = (fmt & Mesh.ARRAY_FLAG_COMPRESS_ATTRIBUTES) != 0
+
+	for i in range(_CUSTOM_ARRAY_SLOTS.size()):
+		var slot: int = _CUSTOM_ARRAY_SLOTS[i]
+		if arr.size() <= slot:
+			continue
+		var data: Variant = arr[slot]
+		if data == null:
+			continue
+
+		var custom_type: int = -1
+		if data is PackedByteArray:
+			var bytes: PackedByteArray = data
+			if bytes.size() >= vertex_count * 4:
+				custom_type = Mesh.ARRAY_CUSTOM_RGBA8_UNORM
+			else:
+				arr[slot] = null
+				continue
+		elif data is PackedFloat32Array:
+			var floats: PackedFloat32Array = data
+			if vertex_count > 0 and floats.size() == vertex_count * 2:
+				custom_type = Mesh.ARRAY_CUSTOM_RG_FLOAT
+			elif floats.size() >= vertex_count * 4:
+				custom_type = Mesh.ARRAY_CUSTOM_RGBA_FLOAT
+			else:
+				arr[slot] = null
+				continue
+		elif data is PackedColorArray:
+			# Godot custom channels are not PackedColorArray; drop to avoid invalid format.
+			arr[slot] = null
+			continue
+		else:
+			arr[slot] = null
+			continue
+
+		flags |= custom_type << _CUSTOM_FORMAT_SHIFTS[i]
+
+	if not source_compressed and (fmt & Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS) != 0:
+		flags |= Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS
+
+	if _paint_sync_mode == SYNC_ATTRIBUTE and not source_compressed:
+		flags |= MESH_BUILD_FLAGS
+	return flags
+
+
 func _try_surface_get_arrays_single(surf_idx: int, result: ArrayMesh) -> bool:
 	var format = _source_mesh.surface_get_format(surf_idx)
 	if (format & Mesh.ARRAY_FLAG_COMPRESS_ATTRIBUTES) != 0:
@@ -857,42 +930,32 @@ func _try_surface_get_arrays_single(surf_idx: int, result: ArrayMesh) -> bool:
 
 	var vertex_count = verts.size()
 	arr = arr.duplicate(true)
-	_strip_migrated_color_custom(arr, surf_idx)
 	var cols = _ensure_packed_color_array(
 		surface_data.get(surf_idx) if surface_data.has(surf_idx) else null,
 		vertex_count)
 	arr[Mesh.ARRAY_COLOR] = cols
+	var build_flags: int = _prepare_arrays_for_rebuild(arr, surf_idx, vertex_count)
 
 	var count_before = result.get_surface_count()
-	result.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr, [], {}, _surface_build_flags(surf_idx))
+	result.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr, [], {}, build_flags)
 	if result.get_surface_count() == count_before:
 		return false  # add_surface_from_arrays failed (e.g. invalid arrays), use MeshDataTool
 	_apply_surface_material(result, surf_idx)
 	return true
 
 
-## Rebuild flags: preserve custom format types + bone-weight flag; optional dynamic update.
+## Legacy helper kept for MDT path bone/dynamic flags when no custom arrays are present.
 func _surface_build_flags(surf_idx: int) -> int:
 	var flags: int = 0
 	var fmt: int = 0
 	if _source_mesh and surf_idx < _source_mesh.get_surface_count():
 		fmt = _source_mesh.surface_get_format(surf_idx)
-
-	var skip_slot: int = int(_normalized_color_custom_slot.get(surf_idx, -1))
-	for i in range(_CUSTOM_ARRAY_SLOTS.size()):
-		if _CUSTOM_ARRAY_SLOTS[i] == skip_slot:
-			continue
-		if (fmt & _CUSTOM_FORMAT_PRESENCE[i]) == 0:
-			continue
-		var custom_type: int = (fmt >> _CUSTOM_FORMAT_SHIFTS[i]) & Mesh.ARRAY_FORMAT_CUSTOM_MASK
-		flags |= custom_type << _CUSTOM_FORMAT_SHIFTS[i]
-
+	if (fmt & Mesh.ARRAY_FLAG_COMPRESS_ATTRIBUTES) != 0:
+		return 0
 	if (fmt & Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS) != 0:
 		flags |= Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS
-
 	if _paint_sync_mode == SYNC_ATTRIBUTE:
-		if (fmt & Mesh.ARRAY_FLAG_COMPRESS_ATTRIBUTES) == 0:
-			flags |= MESH_BUILD_FLAGS
+		flags |= MESH_BUILD_FLAGS
 	return flags
 
 
@@ -1023,14 +1086,14 @@ func _try_surface_get_arrays_path() -> ArrayMesh:
 
 		var vertex_count = verts.size()
 		arr = arr.duplicate(true)
-		_strip_migrated_color_custom(arr, surf_idx)
 		var cols = _ensure_packed_color_array(
 			surface_data.get(surf_idx) if surface_data.has(surf_idx) else null,
 			vertex_count)
 		arr[Mesh.ARRAY_COLOR] = cols
+		var build_flags: int = _prepare_arrays_for_rebuild(arr, surf_idx, vertex_count)
 
 		var count_before = result.get_surface_count()
-		result.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr, [], {}, _surface_build_flags(surf_idx))
+		result.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr, [], {}, build_flags)
 		if result.get_surface_count() == count_before:
 			return null  # Invalid array format (Godot 4.2+), use Per-Surface-Hybrid
 		_apply_surface_material(result, surf_idx)
@@ -1056,19 +1119,12 @@ func _mesh_has_surface_materials(mesh: Mesh) -> bool:
 	return false
 
 
-func _pick_source_mesh(parent: MeshInstance3D, current_mesh: Mesh) -> Mesh:
+## Paint/rebuild source is always the current instance mesh.
+## `_vertex_paint_original_path` is for Revert only — reloading it here caused topology
+## mismatches (e.g. 1-surface baked mesh vs compressed multi-surface GLB) and invisible meshes.
+func _pick_source_mesh(_parent: MeshInstance3D, current_mesh: Mesh) -> Mesh:
 	if current_mesh == null or current_mesh.get_surface_count() == 0:
 		return null
-
-	if parent.has_meta("_vertex_paint_original_path"):
-		var path: String = parent.get_meta("_vertex_paint_original_path")
-		if ResourceLoader.exists(path):
-			var loaded = load(path)
-			if loaded is Mesh and (loaded as Mesh).get_surface_count() > 0:
-				return loaded
-
-	if _mesh_has_compressed_surfaces(current_mesh):
-		return current_mesh
 	return current_mesh
 
 
@@ -1284,8 +1340,11 @@ func _apply_colors():
 	if parent.mesh != _runtime_mesh:
 		parent.mesh = _runtime_mesh
 
+	var override_limit: int = mini(
+			parent.get_surface_override_material_count(),
+			_runtime_mesh.get_surface_count())
 	for idx in instance_overrides:
-		if idx < parent.get_surface_override_material_count():
+		if idx < override_limit:
 			parent.set_surface_override_material(idx, instance_overrides[idx])
 
 	_cache_source_arrays(_runtime_mesh)

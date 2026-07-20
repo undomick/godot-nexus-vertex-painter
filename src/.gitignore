@@ -1,5 +1,13 @@
 # Build output (local - also copied to addon bin/)
 bin/
 
+# Intermediate objects (SConstruct writes these under bin/obj/; safety net if not)
+*.obj
+*.o
+*.os
+
+# Generated editor doc bindings
+gen/
+
 # godot-cpp (clone manually or via submodule)
 # godot-cpp/

@@ -40,6 +40,71 @@ func infer_original_mesh_path(mesh_instance: MeshInstance3D) -> String:
 	return ""
 
 
+## Loads a Mesh from `_vertex_paint_original_path`.
+## Imported GLTF/GLB meshes use paths like `res://model.glb::ArrayMesh_xxx`.
+## `ResourceLoader.exists` / `load` reject those; resolve via the parent PackedScene.
+func load_mesh_from_original_path(original_path: String) -> Mesh:
+	if original_path.is_empty():
+		return null
+
+	if ResourceLoader.exists(original_path):
+		var direct: Resource = load(original_path)
+		if direct is Mesh:
+			return direct as Mesh
+
+	var base_path: String = original_path
+	var sep: int = original_path.find("::")
+	if sep >= 0:
+		base_path = original_path.substr(0, sep)
+
+	if base_path.is_empty() or not ResourceLoader.exists(base_path):
+		return null
+
+	var base_res: Resource = load(base_path)
+	if base_res is Mesh:
+		return base_res as Mesh
+	if not (base_res is PackedScene):
+		return null
+
+	var inst: Node = (base_res as PackedScene).instantiate()
+	if inst == null:
+		return null
+
+	var found: Mesh = _find_mesh_by_resource_path(inst, original_path)
+	if found == null and sep >= 0:
+		# Fallback: unique MeshInstance3D in the imported scene.
+		var only: Mesh = null
+		var count: int = 0
+		for mi in _collect_mesh_instances(inst):
+			if mi.mesh:
+				count += 1
+				only = mi.mesh
+		if count == 1:
+			found = only
+
+	inst.free()
+	return found
+
+
+func _find_mesh_by_resource_path(root: Node, want_path: String) -> Mesh:
+	for mi in _collect_mesh_instances(root):
+		if mi.mesh and mi.mesh.resource_path == want_path:
+			return mi.mesh
+	return null
+
+
+func _collect_mesh_instances(root: Node) -> Array[MeshInstance3D]:
+	var out: Array[MeshInstance3D] = []
+	var stack: Array[Node] = [root]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		if n is MeshInstance3D:
+			out.append(n as MeshInstance3D)
+		for c in n.get_children():
+			stack.append(c)
+	return out
+
+
 func get_ancestor_scene_root(plugin: EditorPlugin, node: Node) -> Node:
 	var current := node
 	while current:
@@ -90,35 +155,42 @@ func save_scene_root_to_path(scene_root: Node, path: String) -> bool:
 	if original_transform:
 		save_root.transform = original_transform
 
+	var ok := false
 	var lower_path = path.to_lower()
 	if lower_path.ends_with(".tscn") or lower_path.ends_with(".scn"):
 		var packed_scene := PackedScene.new()
 		var pack_error := packed_scene.pack(save_root)
 		if pack_error != OK:
 			VertexPainterLog.error("Failed to pack scene root for saving: " + error_string(pack_error))
-			return false
-		var save_error := ResourceSaver.save(packed_scene, path)
-		if save_error != OK:
-			VertexPainterLog.error("Failed to save packed scene: " + error_string(save_error))
-			return false
-		return true
-
-	if lower_path.ends_with(".gltf") or lower_path.ends_with(".glb"):
+		else:
+			var save_error := ResourceSaver.save(packed_scene, path)
+			if save_error != OK:
+				VertexPainterLog.error("Failed to save packed scene: " + error_string(save_error))
+			else:
+				ok = true
+	elif lower_path.ends_with(".gltf") or lower_path.ends_with(".glb"):
 		var gltf_document := GLTFDocument.new()
 		var gltf_state := GLTFState.new()
 		gltf_state.base_path = path.get_base_dir()
 		var append_error := gltf_document.append_from_scene(save_root, gltf_state)
 		if append_error != OK:
 			VertexPainterLog.error("Failed to convert scene to glTF: " + error_string(append_error))
-			return false
-		var write_error := gltf_document.write_to_filesystem(gltf_state, path)
-		if write_error != OK:
-			VertexPainterLog.error("Failed to write glTF scene: " + error_string(write_error))
-			return false
-		return true
+		else:
+			var write_error := gltf_document.write_to_filesystem(gltf_state, path)
+			if write_error != OK:
+				VertexPainterLog.error("Failed to write glTF scene: " + error_string(write_error))
+			else:
+				ok = true
+	else:
+		VertexPainterLog.error("Unsupported scene file type for Bake to Scene: " + path)
 
-	VertexPainterLog.error("Unsupported scene file type for Bake to Scene: " + path)
-	return false
+	save_root.free()
+	return ok
+
+
+static func scene_path_needs_reimport(path: String) -> bool:
+	var lower := path.to_lower()
+	return lower.ends_with(".gltf") or lower.ends_with(".glb")
 
 
 static func is_preview_vertex_color_material(mat: Material, preview_paths: Dictionary) -> bool:
@@ -166,11 +238,18 @@ func on_bake_to_scene_requested(plugin: EditorPlugin) -> void:
 				"Selected mesh is not part of a saved scene. Open a saved .tscn, .scn, .gltf, or .glb scene to bake to scene file.")
 		return
 
-	var current_scene_root := plugin.get_editor_interface().get_edited_scene_root()
 	var scene_path := scene_root.scene_file_path
 	if scene_path == "":
 		VertexPainterLog.warn("Ancestor scene has no file path. Save the scene before baking to file.")
 		return
+
+	# Capture before bake/save/reimport — those steps can free the edited root.
+	var edited_root := plugin.get_editor_interface().get_edited_scene_root()
+	var reload_path := scene_path
+	if edited_root != null and is_instance_valid(edited_root):
+		var edited_path: String = edited_root.scene_file_path
+		if not edited_path.is_empty():
+			reload_path = edited_path
 
 	if not bake_vertex_color_data_in_scene(plugin, scene_root):
 		VertexPainterLog.warn("Bake to Scene aborted because no mesh data could be baked.")
@@ -182,8 +261,16 @@ func on_bake_to_scene_requested(plugin: EditorPlugin) -> void:
 		VertexPainterLog.error("Failed to save scene to " + scene_path)
 		return
 
-	plugin.get_editor_interface().get_resource_filesystem().reimport_files([scene_path])
-	plugin.get_editor_interface().reload_scene_from_path(current_scene_root.scene_file_path)
+	var fs := plugin.get_editor_interface().get_resource_filesystem()
+	if scene_path_needs_reimport(scene_path):
+		fs.reimport_files(PackedStringArray([scene_path]))
+	else:
+		# .tscn / .scn are not importable — reimport_files causes
+		# "importer for type '' not found" and can free the open scene.
+		fs.update_file(scene_path)
+
+	if not reload_path.is_empty():
+		plugin.get_editor_interface().reload_scene_from_path(reload_path)
 	plugin._on_mode_toggled(true)
 
 	print_rich("[color=cyan]Baked vertex colors into scene file: %s.[/color]" % scene_path)
@@ -234,15 +321,10 @@ func do_revert(plugin: EditorPlugin, colliders: VertexPaintColliders, preview: V
 			continue
 		if mesh_instance.has_meta("_vertex_paint_original_path"):
 			var original_path = mesh_instance.get_meta("_vertex_paint_original_path")
-			if ResourceLoader.exists(original_path):
-				var original_mesh = load(original_path)
-				if original_mesh and original_mesh is Mesh:
-					mesh_instance.mesh = original_mesh
-					reverted_count += 1
-				elif not original_mesh:
-					VertexPainterLog.error("Could not load original mesh from " + str(original_path))
-				else:
-					VertexPainterLog.error("Loaded resource is not a Mesh: " + str(original_path))
+			var original_mesh: Mesh = load_mesh_from_original_path(str(original_path))
+			if original_mesh:
+				mesh_instance.mesh = original_mesh
+				reverted_count += 1
 			else:
 				VertexPainterLog.error("Original file not found: " + str(original_path))
 		else:
