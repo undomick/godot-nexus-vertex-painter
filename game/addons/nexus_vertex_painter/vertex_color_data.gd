@@ -646,7 +646,21 @@ func _uses_arrays_color_sync(surf_idx: int) -> bool:
 	return cached is Array
 
 
+func _mesh_supports_attribute_stroke(mesh: ArrayMesh) -> bool:
+	if mesh == null or mesh.get_surface_count() == 0:
+		return false
+	for surf_idx in range(mesh.get_surface_count()):
+		if not _surface_supports_fast_color_upload(mesh.surface_get_format(surf_idx)):
+			return false
+	return true
+
+
 func _detect_paint_sync_mode(mesh: ArrayMesh) -> void:
+	# Prefer attribute when the mesh already has COLOR + DYNAMIC_UPDATE so strokes
+	# never reassign MeshInstance3D.mesh (Inspector rebuild / jitter).
+	if _mesh_supports_attribute_stroke(mesh):
+		_paint_sync_mode = SYNC_ATTRIBUTE
+		return
 	_paint_sync_mode = SYNC_ARRAYS
 	for surf_idx in range(mesh.get_surface_count()):
 		var fmt: int = mesh.surface_get_format(surf_idx)
@@ -659,7 +673,19 @@ func _detect_paint_sync_mode(mesh: ArrayMesh) -> void:
 			return
 
 
-## v2.0-style GPU sync: duplicate cached surface arrays and inject surface_data colors.
+func _promote_runtime_mesh_to_attribute_stroke(rebuilt: ArrayMesh) -> void:
+	_runtime_mesh = rebuilt
+	_cached_mesh = rebuilt
+	_attrib_upload_cache.clear()
+	if not _mesh_supports_attribute_stroke(rebuilt):
+		_detect_paint_sync_mode(rebuilt)
+		return
+	_paint_sync_mode = SYNC_ATTRIBUTE
+	_prewarm_attrib_upload_cache(rebuilt)
+
+
+## One-shot GPU sync via cached surface arrays. Builds a NEW ArrayMesh with
+## USE_DYNAMIC_UPDATE, assigns once, then promotes to attribute stroke updates.
 ## Always rebuilds into a NEW ArrayMesh so clear/failed add never wipes parent.mesh in-place.
 func _sync_colors_via_arrays_runtime_mesh() -> void:
 	var parent: MeshInstance3D = get_parent() as MeshInstance3D
@@ -720,7 +746,6 @@ func _sync_colors_via_arrays_runtime_mesh() -> void:
 				"Arrays color sync produced no surfaces on '%s'; keeping previous mesh." % parent.name)
 		return
 
-	_runtime_mesh = rebuilt
 	parent.mesh = rebuilt
 	var override_limit: int = mini(
 			parent.get_surface_override_material_count(),
@@ -728,7 +753,7 @@ func _sync_colors_via_arrays_runtime_mesh() -> void:
 	for idx in instance_overrides:
 		if idx < override_limit:
 			parent.set_surface_override_material(idx, instance_overrides[idx])
-
+	_promote_runtime_mesh_to_attribute_stroke(rebuilt)
 
 ## Writes surface_data to the mesh GPU buffer.
 func _sync_surface_data_to_gpu() -> void:
@@ -766,7 +791,11 @@ func update_surface_colors(surface_idx: int, new_colors: PackedColorArray, defer
 		_sync_colors_via_arrays_runtime_mesh()
 		return
 
-	_try_fast_color_update(surface_idx, new_colors)
+	if _try_fast_color_update(surface_idx, new_colors):
+		return
+	# Attribute path failed: one-shot arrays rebuild (promotes back to attribute when possible).
+	if _source_arrays_cache.get(surface_idx) is Array:
+		_sync_colors_via_arrays_runtime_mesh()
 
 
 func flush_gpu_updates() -> void:
@@ -789,9 +818,18 @@ func _flush_pending_gpu_updates() -> void:
 
 	if use_arrays_sync:
 		_sync_colors_via_arrays_runtime_mesh()
+		_pending_gpu_surfaces.clear()
+		return
+
+	var failed_attribute: bool = false
 	for surf_idx in attribute_surfaces:
 		var colors: PackedColorArray = _pending_gpu_surfaces[surf_idx]
-		_try_fast_color_update(surf_idx, colors)
+		if not _try_fast_color_update(surf_idx, colors):
+			failed_attribute = true
+			break
+
+	if failed_attribute and not _source_arrays_cache.is_empty():
+		_sync_colors_via_arrays_runtime_mesh()
 
 	_pending_gpu_surfaces.clear()
 
@@ -911,7 +949,9 @@ func _prepare_arrays_for_rebuild(arr: Array, surf_idx: int, vertex_count: int) -
 	if not source_compressed and (fmt & Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS) != 0:
 		flags |= Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS
 
-	if _paint_sync_mode == SYNC_ATTRIBUTE and not source_compressed:
+	# Uncompressed rebuilds always request dynamic update so the first arrays sync
+	# can promote to attribute strokes (stable parent.mesh / no Inspector jitter).
+	if not source_compressed:
 		flags |= MESH_BUILD_FLAGS
 	return flags
 
@@ -954,8 +994,7 @@ func _surface_build_flags(surf_idx: int) -> int:
 		return 0
 	if (fmt & Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS) != 0:
 		flags |= Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS
-	if _paint_sync_mode == SYNC_ATTRIBUTE:
-		flags |= MESH_BUILD_FLAGS
+	flags |= MESH_BUILD_FLAGS
 	return flags
 
 

@@ -3,6 +3,7 @@ blender/
 
 # Local Cursor / editor config
 .cursor/
+
 # Local / vendor trees not tracked with this repo
 game/addons/nexus_importer/
 game/props/

@@ -27,8 +27,10 @@ During strokes the addon picks one of two GPU update strategies:
 
 | Mode | When | Stroke update |
 |------|------|----------------|
-| **arrays** (default) | Uncompressed mesh, `ARRAY_COLOR`, `surface_get_arrays` readable | Duplicate cached surface arrays, inject `surface_data`, `add_surface_from_arrays` (v2.0-style) |
-| **attribute** (fallback) | Compressed attributes or arrays unavailable | `surface_update_attribute_region` with cached attribute stride |
+| **attribute** (stroke default after setup) | Mesh has `ARRAY_COLOR` + `ARRAY_FLAG_USE_DYNAMIC_UPDATE` (uncompressed) | `surface_update_attribute_region` — **does not** reassign `MeshInstance3D.mesh` (avoids Inspector rebuild / jitter) |
+| **arrays** (one-shot upgrade / fallback) | Uncompressed mesh with readable `surface_get_arrays`, but not yet dynamic | Duplicate cached surface arrays, inject `surface_data`, build a **new** `ArrayMesh` with `USE_DYNAMIC_UPDATE`, assign once, then promote to attribute |
+
+Compressed attributes or missing array cache also start on the attribute path; live upload still needs a paintable (uncompressed + dynamic) mesh after normalize/rebuild.
 
 **Normalize / rebuild** prefers `surface_get_arrays` (GDScript hybrid, then C++ arrays path). MeshDataTool is used only for compressed surfaces or when arrays are invalid. C++ `apply_colors_to_mesh` no longer blocks the fast arrays rebuild.
 
@@ -42,8 +44,7 @@ For best performance:
 
 - **No** `Mesh.ARRAY_FLAG_COMPRESS_ATTRIBUTES` on paintable surfaces
 - `ARRAY_COLOR` present after normalize (automatic on first paint for CUSTOM / face-corner imports)
-
-`ARRAY_FLAG_USE_DYNAMIC_UPDATE` is **not** required for the default arrays sync mode.
+- After the first paint sync, surfaces use `ARRAY_FLAG_USE_DYNAMIC_UPDATE` so strokes stay on the attribute path
 
 **glTF import:** enable `meshes/force_disable_compression=true` on paintable assets, then reimport.
 

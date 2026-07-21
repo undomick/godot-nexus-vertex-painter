@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.2] - 2026-07-21
+
+### Fixed
+
+- Painting with the **Inspector** open no longer rebuilds the inspector every dab (mesh reference stays stable after a one-shot dynamic upgrade; strokes use attribute region updates)
+
+---
+
 ## [2.3.1] - 2026-07-20
 
 ### Fixed

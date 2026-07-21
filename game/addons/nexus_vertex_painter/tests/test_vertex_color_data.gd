@@ -70,6 +70,7 @@ func _run_all_tests() -> void:
 	test_get_normals_returns_cached_data()
 	test_empty_surface_returns_black_colors()
 	test_source_arrays_cache_stores_real_arrays()
+	test_paint_updates_keep_mesh_instance_stable()
 
 
 func test_initialize_from_mesh_imports_colors() -> void:
@@ -188,3 +189,42 @@ func test_source_arrays_cache_stores_real_arrays() -> void:
 	var arrays: Array = cached as Array
 	if arrays[Mesh.ARRAY_VERTEX] == null:
 		_fail("source_arrays_cache: missing vertex array")
+
+
+func test_paint_updates_keep_mesh_instance_stable() -> void:
+	_data_node.initialize_from_mesh()
+	_data_node._bind_paint_mesh_from_parent()
+
+	var colors_a := PackedColorArray([
+		Color(1, 0, 0, 1),
+		Color(0, 1, 0, 1),
+		Color(0, 0, 1, 1),
+	])
+	_data_node.update_surface_colors(0, colors_a, false)
+
+	var mesh_after_first: Mesh = _mesh_instance.mesh
+	if mesh_after_first == null or not mesh_after_first is ArrayMesh:
+		_fail("paint stable mesh: expected ArrayMesh after first update")
+		return
+	var id_after_first: int = mesh_after_first.get_instance_id()
+	var fmt: int = (mesh_after_first as ArrayMesh).surface_get_format(0)
+	if (fmt & Mesh.ARRAY_FLAG_USE_DYNAMIC_UPDATE) == 0:
+		_fail("paint stable mesh: expected USE_DYNAMIC_UPDATE after first sync")
+		return
+	if _data_node._paint_sync_mode != VertexColorData.SYNC_ATTRIBUTE:
+		_fail("paint stable mesh: expected SYNC_ATTRIBUTE after first sync, got %d" % _data_node._paint_sync_mode)
+		return
+
+	var colors_b := PackedColorArray([
+		Color(1, 1, 0, 1),
+		Color(0, 1, 1, 1),
+		Color(1, 0, 1, 1),
+	])
+	_data_node.update_surface_colors(0, colors_b, false)
+	_data_node.update_surface_colors(0, colors_a, false)
+
+	if _mesh_instance.mesh == null:
+		_fail("paint stable mesh: mesh became null during updates")
+		return
+	if _mesh_instance.mesh.get_instance_id() != id_after_first:
+		_fail("paint stable mesh: mesh instance_id changed during paint (Inspector jitter)")

@@ -89,7 +89,7 @@ When using the addon in another project, that path is `addons/nexus_vertex_paint
 Optional version metadata at build time:
 
 ```bash
-ADDON_VERSION=2.3.0 ADDON_AUTHOR="Michael Kulzer" scons platform=linux target=editor arch=x86_64
+ADDON_VERSION=2.3.2 ADDON_AUTHOR="Michael Kulzer" scons platform=linux target=editor arch=x86_64
 ```
 
 ### Prerequisites
