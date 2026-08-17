@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.4.0] - 2026-08-17
+
+### Added
+
+- **Vertex locations under brush**: Optional **Show vertices** toggle displays one marker per unique mesh position inside the active brush decal.
+
+### Changed
+
+- **Combine Meshes**: Surfaces that use the same material resource are merged into one material slot in the combined mesh.
+- **Transform gizmo**: Vertex Paint temporarily hides the transform gizmo for selected meshes and restores each mesh's previous lock state when paint mode or the plugin is disabled.
+
+---
+
 ## [2.3.2] - 2026-07-21
 
 ### Fixed
@@ -118,4 +131,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Brush texture support, triplanar sampling
 - Slope and curvature masks
 - Undo/Redo support
-

@@ -33,6 +33,9 @@ var _logged_paint_diagnostics: Dictionary = {}
 var _vertex_color_preview_active: bool = false
 var _vertex_color_preview_overlays: Dictionary = {}
 var _vertex_color_preview_mat: Material = null
+var _vertex_location_preview_active: bool = false
+var _vertex_location_preview_overlays: Dictionary = {}
+var _vertex_location_preview_material: ShaderMaterial = null
 
 var _paint_motion_counter: int = 0
 var _preview_stored_state: Dictionary = {}
@@ -78,6 +81,7 @@ func _enter_tree():
 	dock_instance.transfer_snapshot_requested.connect(_on_transfer_snapshot_requested)
 	dock_instance.combine_meshes_requested.connect(_on_combine_meshes_requested)
 	dock_instance.show_vertex_colors_toggled.connect(_on_show_vertex_colors_toggled)
+	dock_instance.show_vertex_locations_toggled.connect(_on_show_vertex_locations_toggled)
 	dock_instance.set_ui_active(false)
 
 	revert_confirm_dialog = ConfirmationDialog.new()
@@ -186,6 +190,7 @@ func _exit_tree():
 		btn_mode.free()
 
 	_preview.clear_preview_overlays(self, true, _colliders)
+	_preview.clear_vertex_location_preview(self)
 	_colliders.clear_all_locks(self)
 	_colliders.clear_all_colliders(self)
 
@@ -196,6 +201,7 @@ func _on_mode_toggled(pressed: bool):
 
 	if not pressed:
 		_preview.clear_vertex_color_preview(self)
+		_preview.clear_vertex_location_preview(self)
 		_preview.clear_preview_overlays(self, true, _colliders)
 		_colliders.clear_all_locks(self)
 		_colliders.clear_all_colliders(self)
@@ -314,6 +320,10 @@ func _update_brush_image_cache():
 
 func _on_show_vertex_colors_toggled(pressed: bool) -> void:
 	_preview.on_show_vertex_colors_toggled(self, _colliders, pressed)
+
+
+func _on_show_vertex_locations_toggled(pressed: bool) -> void:
+	_preview.on_show_vertex_locations_toggled(self, pressed)
 
 
 func _on_procedural_requested(type: String, settings: Dictionary):

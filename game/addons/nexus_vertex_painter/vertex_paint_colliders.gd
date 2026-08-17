@@ -20,6 +20,7 @@ func get_paint_collision_mask() -> int:
 func refresh_selection_and_colliders(plugin: EditorPlugin, preview: VertexPaintPreview) -> void:
 	var selection := plugin.get_editor_interface().get_selection().get_selected_nodes()
 	var new_mesh_list: Array[MeshInstance3D] = []
+	var transform_gizmo_changed := false
 
 	selection = selection.filter(func(node):
 		return is_instance_valid(node)
@@ -32,8 +33,11 @@ func refresh_selection_and_colliders(plugin: EditorPlugin, preview: VertexPaintP
 	if plugin.paint_mode_active:
 		for mesh in new_mesh_list:
 			if not mesh.has_meta("_edit_lock_"):
+				mesh.set_meta("_edit_lock_", true)
+				plugin.locked_nodes.append(mesh)
 				mesh.notify_property_list_changed()
 				mesh.update_gizmos()
+				transform_gizmo_changed = true
 
 		for i in range(plugin.locked_nodes.size() - 1, -1, -1):
 			var mesh = plugin.locked_nodes[i]
@@ -42,9 +46,12 @@ func refresh_selection_and_colliders(plugin: EditorPlugin, preview: VertexPaintP
 					mesh.remove_meta("_edit_lock_")
 					mesh.notify_property_list_changed()
 					mesh.update_gizmos()
+					transform_gizmo_changed = true
 				plugin.locked_nodes.remove_at(i)
 			elif not is_instance_valid(mesh):
 				plugin.locked_nodes.remove_at(i)
+		if transform_gizmo_changed:
+			_refresh_transform_gizmo(plugin)
 
 	for mesh in new_mesh_list:
 		if not _has_internal_collider(plugin, mesh):
@@ -61,6 +68,7 @@ func refresh_selection_and_colliders(plugin: EditorPlugin, preview: VertexPaintP
 
 	plugin.selected_meshes = new_mesh_list
 	preview.sync_vertex_color_preview(plugin, self)
+	preview.sync_vertex_location_preview(plugin)
 
 
 func on_selection_changed(plugin: EditorPlugin, preview: VertexPaintPreview) -> void:
@@ -74,13 +82,28 @@ func on_selection_changed(plugin: EditorPlugin, preview: VertexPaintPreview) -> 
 
 
 func clear_all_locks(plugin: EditorPlugin) -> void:
+	var transform_gizmo_changed := false
 	for mesh in plugin.locked_nodes:
 		if is_instance_valid(mesh):
 			if mesh.has_meta("_edit_lock_"):
 				mesh.remove_meta("_edit_lock_")
 				mesh.notify_property_list_changed()
 				mesh.update_gizmos()
+				transform_gizmo_changed = true
 	plugin.locked_nodes.clear()
+	if transform_gizmo_changed:
+		_refresh_transform_gizmo(plugin)
+
+
+func _refresh_transform_gizmo(plugin: EditorPlugin) -> void:
+	var main_screen := plugin.get_editor_interface().get_editor_main_screen()
+	if main_screen == null:
+		return
+	var editors := main_screen.find_children("*", "Node3DEditor", true, false)
+	for editor in editors:
+		if editor.has_method("update_transform_gizmo"):
+			editor.call("update_transform_gizmo")
+			return
 
 
 func _has_internal_collider(plugin: EditorPlugin, mesh: MeshInstance3D) -> bool:

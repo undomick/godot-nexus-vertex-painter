@@ -23,6 +23,8 @@ func is_combinable_mesh_instance(node: Node) -> bool:
 
 func combine_mesh_instances(mesh_instances: Array[MeshInstance3D]) -> Dictionary:
 	var final_mesh := ArrayMesh.new()
+	var surface_tools_by_material: Dictionary = {}
+	var ordered_surface_tools: Array[SurfaceTool] = []
 
 	for mesh_instance in mesh_instances:
 		var source_mesh := _mesh_for_combine(mesh_instance)
@@ -30,11 +32,18 @@ func combine_mesh_instances(mesh_instances: Array[MeshInstance3D]) -> Dictionary
 			continue
 		var world_xform := mesh_instance.global_transform
 		for surface_idx in range(source_mesh.get_surface_count()):
-			var surface_tool := SurfaceTool.new()
-			surface_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
-			surface_tool.set_material(source_mesh.surface_get_material(surface_idx))
+			var material := source_mesh.surface_get_material(surface_idx)
+			var surface_tool: SurfaceTool = surface_tools_by_material.get(material)
+			if surface_tool == null:
+				surface_tool = SurfaceTool.new()
+				surface_tool.begin(Mesh.PRIMITIVE_TRIANGLES)
+				surface_tool.set_material(material)
+				surface_tools_by_material[material] = surface_tool
+				ordered_surface_tools.append(surface_tool)
 			surface_tool.append_from(source_mesh, surface_idx, world_xform)
-			surface_tool.commit(final_mesh)
+
+	for surface_tool in ordered_surface_tools:
+		surface_tool.commit(final_mesh)
 
 	if final_mesh.get_surface_count() == 0:
 		return {"mesh": final_mesh, "world_pivot": Vector3.ZERO}

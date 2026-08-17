@@ -20,4 +20,4 @@ config/icon="res://icon.svg"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/nexus_vertex_painter/plugin.cfg")
+enabled=PackedStringArray("res://addons/nexus_importer/plugin.cfg", "res://addons/nexus_vertex_painter/plugin.cfg")

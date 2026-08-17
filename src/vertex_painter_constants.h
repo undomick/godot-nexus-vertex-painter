@@ -3,7 +3,7 @@
 
 /// Version and author (override at build time via SCons: addon_version=, addon_author=).
 #ifndef NEXUS_VERTEX_PAINTER_VERSION
-#define NEXUS_VERTEX_PAINTER_VERSION "2.3.2"
+#define NEXUS_VERTEX_PAINTER_VERSION "2.4.0"
 #endif
 #ifndef NEXUS_VERTEX_PAINTER_AUTHOR
 #define NEXUS_VERTEX_PAINTER_AUTHOR "Michael Kulzer"

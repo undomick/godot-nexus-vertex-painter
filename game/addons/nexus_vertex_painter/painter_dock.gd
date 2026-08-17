@@ -11,6 +11,7 @@ signal bake_requested()
 signal bake_to_scene_requested()
 signal revert_requested()
 signal show_vertex_colors_toggled(pressed: bool)
+signal show_vertex_locations_toggled(pressed: bool)
 signal export_snapshot_requested()
 signal transfer_snapshot_requested()
 signal combine_meshes_requested()
@@ -69,6 +70,7 @@ const PROJECTION_FRONT_ONLY := 1
 @onready var btn_proc_noise: Button = %Proc_Noise_Btn
 
 # Vertex color preview (under Channels in dock)
+@onready var btn_show_vertex_locations: Button = %ShowVertexLocations_Button
 @onready var btn_show_vertex_colors: Button = %ShowVertexColors_Button
 @onready var vc_preview_strength_slider: HSlider = %VCPreviewStrengthSlider
 @onready var vc_preview_strength_value: LineEdit = %VCPreviewStrengthValue
@@ -187,6 +189,8 @@ func _ready() -> void:
 	
 	if not btn_revert.pressed.is_connected(_on_revert_pressed):
 		btn_revert.pressed.connect(_on_revert_pressed)
+	if btn_show_vertex_locations and not btn_show_vertex_locations.toggled.is_connected(_on_show_vertex_locations_toggled):
+		btn_show_vertex_locations.toggled.connect(_on_show_vertex_locations_toggled)
 	if btn_show_vertex_colors and not btn_show_vertex_colors.toggled.is_connected(_on_show_vertex_colors_toggled):
 		btn_show_vertex_colors.toggled.connect(_on_show_vertex_colors_toggled)
 	if btn_export_snapshot and not btn_export_snapshot.pressed.is_connected(_on_export_snapshot_pressed):
@@ -259,6 +263,8 @@ func _setup_tooltips() -> void:
 		btn_combine_meshes.tooltip_text = "Merge 2+ selected MeshInstance3D nodes into one centered ArrayMesh (keeps painted vertex colors)"
 	if btn_show_vertex_colors:
 		btn_show_vertex_colors.tooltip_text = "Blend painted vertex colors over the mesh materials (does not replace shaders)"
+	if btn_show_vertex_locations:
+		btn_show_vertex_locations.tooltip_text = "Show mesh vertices inside the active brush decal"
 	if vc_preview_strength_slider:
 		vc_preview_strength_slider.tooltip_text = "How strongly vertex colors are blended over the base material (0 = off, 1 = full)"
 	if btn_export_snapshot:
@@ -415,9 +421,20 @@ func _on_show_vertex_colors_toggled(_pressed: bool) -> void:
 	emit_signal("show_vertex_colors_toggled", btn_show_vertex_colors.button_pressed)
 
 
+func _on_show_vertex_locations_toggled(_pressed: bool) -> void:
+	_update_all_button_visuals()
+	emit_signal("show_vertex_locations_toggled", btn_show_vertex_locations.button_pressed)
+
+
 func set_show_vertex_colors_pressed(pressed: bool) -> void:
 	if btn_show_vertex_colors:
 		btn_show_vertex_colors.button_pressed = pressed
+		_update_all_button_visuals()
+
+
+func set_show_vertex_locations_pressed(pressed: bool) -> void:
+	if btn_show_vertex_locations:
+		btn_show_vertex_locations.button_pressed = pressed
 		_update_all_button_visuals()
 
 # --- VISUAL UPDATE HELPER ---
@@ -437,6 +454,8 @@ func _update_all_button_visuals():
 	_apply_active_style(btn_set, bg_accent, accent)
 	_apply_active_style(btn_blur, bg_accent, accent)
 	_apply_active_style(btn_sharpen, bg_accent, accent)
+	if btn_show_vertex_locations:
+		_apply_active_style(btn_show_vertex_locations, bg_accent, accent)
 	if btn_show_vertex_colors:
 		_apply_active_style(btn_show_vertex_colors, bg_accent, accent)
 

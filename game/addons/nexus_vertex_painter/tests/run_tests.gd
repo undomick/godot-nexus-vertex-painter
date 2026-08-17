@@ -12,6 +12,7 @@ func _initialize() -> void:
 	var test_node_2 = load("res://addons/nexus_vertex_painter/tests/test_mesh_attribute_preservation.gd").new()
 	var test_node_3 = load("res://addons/nexus_vertex_painter/tests/test_surface_color_binding.gd").new()
 	var test_node_4 = load("res://addons/nexus_vertex_painter/tests/test_mesh_combine.gd").new()
+	var test_node_5 = load("res://addons/nexus_vertex_painter/tests/test_vertex_location_preview.gd").new()
 	root.add_child(test_node_1)
 	root.add_child(test_node_2)
 	root.add_child(test_node_3)
@@ -20,6 +21,7 @@ func _initialize() -> void:
 	_test_nodes.append(test_node_2)
 	_test_nodes.append(test_node_3)
 	_test_nodes.append(test_node_4)
+	_test_nodes.append(test_node_5)
 
 
 func _idle(_delta: float) -> bool:

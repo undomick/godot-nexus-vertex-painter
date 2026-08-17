@@ -3,6 +3,9 @@ extends RefCounted
 
 const PREVIEW_VERTEX_COLOR_MATERIAL := "res://addons/nexus_vertex_painter/check_vertex_color.tres"
 const PREVIEW_VERTEX_COLOR_OVERLAY_MATERIAL := "res://addons/nexus_vertex_painter/vertex_color_preview_overlay.tres"
+const VERTEX_LOCATION_PREVIEW_SHADER := (
+		"res://addons/nexus_vertex_painter/shaders/vertex_location_preview.gdshader"
+)
 
 
 func get_preview_material_paths() -> Dictionary:
@@ -321,3 +324,144 @@ func on_show_vertex_colors_toggled(
 			apply_vertex_color_preview_to_mesh(plugin, colliders, mesh_instance)
 	else:
 		clear_vertex_color_preview(plugin)
+
+
+func _get_vertex_location_preview_material(plugin: EditorPlugin) -> ShaderMaterial:
+	if plugin._vertex_location_preview_material:
+		return plugin._vertex_location_preview_material
+	var shader := load(VERTEX_LOCATION_PREVIEW_SHADER) as Shader
+	if shader == null:
+		VertexPainterLog.warn(
+				"Vertex location preview shader not found: " + VERTEX_LOCATION_PREVIEW_SHADER)
+		return null
+	plugin._vertex_location_preview_material = ShaderMaterial.new()
+	plugin._vertex_location_preview_material.shader = shader
+	plugin._vertex_location_preview_material.render_priority = 101
+	return plugin._vertex_location_preview_material
+
+
+func _build_vertex_location_mesh(source_mesh: Mesh) -> ArrayMesh:
+	var point_mesh := ArrayMesh.new()
+	var unique_positions: Dictionary = {}
+	var point_positions := PackedVector3Array()
+	var point_normals := PackedVector3Array()
+	var marker_colors := PackedColorArray()
+	for surface_idx in range(source_mesh.get_surface_count()):
+		var source_arrays := source_mesh.surface_get_arrays(surface_idx)
+		if source_arrays.size() <= Mesh.ARRAY_VERTEX:
+			continue
+		var vertices: Variant = source_arrays[Mesh.ARRAY_VERTEX]
+		if not vertices is PackedVector3Array or vertices.is_empty():
+			continue
+		var normals: Variant = null
+		if source_arrays.size() > Mesh.ARRAY_NORMAL:
+			normals = source_arrays[Mesh.ARRAY_NORMAL]
+		var has_normals: bool = normals is PackedVector3Array and normals.size() == vertices.size()
+		var normal_alpha := 0.0
+		if has_normals:
+			normal_alpha = 1.0
+		for vertex_idx in range(vertices.size()):
+			var position: Vector3 = vertices[vertex_idx]
+			if unique_positions.has(position):
+				continue
+			unique_positions[position] = true
+			point_positions.append(position)
+			marker_colors.append(Color(1.0, 1.0, 1.0, normal_alpha))
+			if has_normals:
+				point_normals.append(normals[vertex_idx])
+			else:
+				point_normals.append(Vector3.ZERO)
+	if point_positions.is_empty():
+		return point_mesh
+	var point_arrays := []
+	point_arrays.resize(Mesh.ARRAY_MAX)
+	point_arrays[Mesh.ARRAY_VERTEX] = point_positions
+	point_arrays[Mesh.ARRAY_NORMAL] = point_normals
+	point_arrays[Mesh.ARRAY_COLOR] = marker_colors
+	point_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_POINTS, point_arrays)
+	return point_mesh
+
+
+func _remove_vertex_location_preview_overlay(
+		plugin: EditorPlugin,
+		mesh_instance: MeshInstance3D) -> void:
+	var overlay: Variant = plugin._vertex_location_preview_overlays.get(mesh_instance)
+	if overlay is MeshInstance3D and is_instance_valid(overlay):
+		if overlay.get_parent() == mesh_instance:
+			mesh_instance.remove_child(overlay)
+		overlay.queue_free()
+	plugin._vertex_location_preview_overlays.erase(mesh_instance)
+
+
+func apply_vertex_location_preview_to_mesh(
+		plugin: EditorPlugin,
+		mesh_instance: MeshInstance3D) -> void:
+	if not is_instance_valid(mesh_instance) or mesh_instance.mesh == null:
+		return
+	var preview_material := _get_vertex_location_preview_material(plugin)
+	if preview_material == null:
+		return
+	_remove_vertex_location_preview_overlay(plugin, mesh_instance)
+	var point_mesh := _build_vertex_location_mesh(mesh_instance.mesh)
+	if point_mesh.get_surface_count() == 0:
+		return
+	var overlay := MeshInstance3D.new()
+	overlay.name = "VertexPaint_LocationPreviewOverlay"
+	overlay.mesh = point_mesh
+	overlay.material_override = preview_material
+	overlay.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	overlay.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+	mesh_instance.add_child(overlay, true, Node.INTERNAL_MODE_BACK)
+	plugin._vertex_location_preview_overlays[mesh_instance] = overlay
+
+
+func clear_vertex_location_preview(plugin: EditorPlugin) -> void:
+	plugin._vertex_location_preview_active = false
+	if plugin._vertex_location_preview_material:
+		plugin._vertex_location_preview_material.set_shader_parameter("brush_radius", 0.0)
+	for mesh_instance in plugin._vertex_location_preview_overlays.keys().duplicate():
+		if is_instance_valid(mesh_instance):
+			_remove_vertex_location_preview_overlay(plugin, mesh_instance)
+	plugin._vertex_location_preview_overlays.clear()
+	if plugin.dock_instance:
+		plugin.dock_instance.set_show_vertex_locations_pressed(false)
+
+
+func sync_vertex_location_preview(plugin: EditorPlugin) -> void:
+	if not plugin._vertex_location_preview_active:
+		return
+	for mesh_instance in plugin._vertex_location_preview_overlays.keys().duplicate():
+		if not is_instance_valid(mesh_instance) or mesh_instance not in plugin.selected_meshes:
+			_remove_vertex_location_preview_overlay(plugin, mesh_instance)
+	for mesh_instance in plugin.selected_meshes:
+		apply_vertex_location_preview_to_mesh(plugin, mesh_instance)
+
+
+func update_vertex_location_preview(
+		plugin: EditorPlugin,
+		brush_pos: Vector3,
+		brush_radius: float) -> void:
+	if not plugin._vertex_location_preview_active:
+		return
+	var preview_material := _get_vertex_location_preview_material(plugin)
+	if preview_material == null:
+		return
+	preview_material.set_shader_parameter("brush_pos", brush_pos)
+	preview_material.set_shader_parameter("brush_radius", brush_radius)
+
+
+func hide_vertex_location_preview(plugin: EditorPlugin) -> void:
+	if plugin._vertex_location_preview_material:
+		plugin._vertex_location_preview_material.set_shader_parameter("brush_radius", 0.0)
+
+
+func on_show_vertex_locations_toggled(plugin: EditorPlugin, pressed: bool) -> void:
+	plugin._vertex_location_preview_active = pressed
+	if not pressed:
+		clear_vertex_location_preview(plugin)
+		return
+	if plugin.selected_meshes.is_empty():
+		VertexPainterLog.warn("Select a MeshInstance3D to show vertex locations.")
+		clear_vertex_location_preview(plugin)
+		return
+	sync_vertex_location_preview(plugin)

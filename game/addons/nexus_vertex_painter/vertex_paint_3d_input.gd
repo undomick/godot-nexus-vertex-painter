@@ -154,10 +154,13 @@ func forward_3d_gui_input(
 			else:
 				plugin.shared_brush_material.set_shader_parameter("use_texture", false)
 			preview.copy_displacement_params_from_mesh(hit_mesh_instance, plugin.shared_brush_material)
+			preview.update_vertex_location_preview(plugin, hit_pos, settings.size)
 		else:
 			plugin.shared_brush_material.set_shader_parameter("brush_radius", 0.0)
+			preview.hide_vertex_location_preview(plugin)
 	elif not plugin.is_adjusting_brush:
 		plugin.shared_brush_material.set_shader_parameter("brush_radius", 0.0)
+		preview.hide_vertex_location_preview(plugin)
 
 	if hit_mesh_instance and not plugin.is_adjusting_brush:
 		var settings = plugin.dock_instance.get_settings()

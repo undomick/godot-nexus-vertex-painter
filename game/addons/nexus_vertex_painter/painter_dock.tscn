@@ -100,6 +100,17 @@ text = "A"
 [node name="HSeparator2" type="HSeparator" parent="Content/ChannelContainer" unique_id=1963645313]
 layout_mode = 2
 
+[node name="HBoxContainerVertexLocations" type="HBoxContainer" parent="Content/ChannelContainer" unique_id=1105376042]
+layout_mode = 2
+
+[node name="ShowVertexLocations_Button" type="Button" parent="Content/ChannelContainer/HBoxContainerVertexLocations" unique_id=1388960329]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+tooltip_text = "Show mesh vertices inside the active brush decal"
+toggle_mode = true
+text = "Show vertices"
+
 [node name="HBoxContainerVC" type="HBoxContainer" parent="Content/ChannelContainer" unique_id=2076674236]
 layout_mode = 2
 
@@ -260,11 +271,13 @@ title = "Smart Masking"
 
 [node name="MaskPreviewCheck" type="CheckBox" parent="Content/MaskContainer" unique_id=1884152858]
 unique_name_in_owner = true
+visible = false
 layout_mode = 2
 tooltip_text = "Show slope/curvature mask as grayscale overlay (white = paintable)"
 text = "Preview Smart Mask"
 
 [node name="GridContainerMaskToggles" type="GridContainer" parent="Content/MaskContainer" unique_id=1726113838]
+visible = false
 layout_mode = 2
 columns = 3
 
@@ -305,6 +318,7 @@ disabled = true
 text = "Invert (Cavity)"
 
 [node name="GridContainerMaskSliders" type="GridContainer" parent="Content/MaskContainer" unique_id=624360124]
+visible = false
 layout_mode = 2
 columns = 3
 
@@ -362,6 +376,7 @@ editable = false
 select_all_on_focus = true
 
 [node name="HSeparator" type="HSeparator" parent="Content/MaskContainer" unique_id=1281584724]
+visible = false
 layout_mode = 2
 
 [node name="ToolsContainer" type="VBoxContainer" parent="Content" unique_id=2052999161]
@@ -499,6 +514,7 @@ script = ExtResource("2_gpvri")
 title = "Transfer"
 
 [node name="HBoxContainerTransfer" type="HBoxContainer" parent="Content/TransferContainer" unique_id=2047073164]
+visible = false
 layout_mode = 2
 
 [node name="ExportSnapshot_Button" type="Button" parent="Content/TransferContainer/HBoxContainerTransfer" unique_id=1309481647]
@@ -516,6 +532,7 @@ tooltip_text = "Load a snapshot and project colors onto the selected mesh (appro
 text = "Transfer from Snapshot"
 
 [node name="TransferSettingsGrid" type="GridContainer" parent="Content/TransferContainer" unique_id=1959955717]
+visible = false
 layout_mode = 2
 columns = 3
 
@@ -585,6 +602,7 @@ script = ExtResource("2_gpvri")
 title = "Production"
 
 [node name="ProductionGrid" type="GridContainer" parent="Content/ProductionContainer" unique_id=1320787825]
+visible = false
 layout_mode = 2
 theme_override_constants/h_separation = 4
 theme_override_constants/v_separation = 4
@@ -611,10 +629,10 @@ size_flags_horizontal = 3
 tooltip_text = "Revert to original mesh (irreversible)"
 text = "Revert to Original"
 
-[node name="CombineMeshes_Button" type="Button" parent="Content/ProductionContainer/ProductionGrid" unique_id=2847193052]
+[node name="CombineMeshes_Button" type="Button" parent="Content/ProductionContainer/ProductionGrid" unique_id=-1447774244]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
+tooltip_text = "Merge 2+ selected MeshInstance3D nodes into one centered ArrayMesh (keeps painted vertex colors)"
 disabled = true
-tooltip_text = "Merge selected MeshInstance3D nodes into one ArrayMesh (world-space, centered origin)"
 text = "Combine Meshes"
